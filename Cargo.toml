@@ -1,0 +1,23 @@
+[package]
+name = "rust-template-basic"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["crates/*"]
+
+[features]
+default = ["dylink"]
+
+[dependencies]
+deps = { path = "crates/deps" }
+dylink = { path = "crates/dylink", optional = true }
+
+[profile.dev]
+# debug = false
+
+# builds dependeinces with release optimizations
+[profile.dev.package."*"]
+# opt-level = 3
+
+[patch.crates-io]

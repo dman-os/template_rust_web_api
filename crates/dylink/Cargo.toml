@@ -1,0 +1,11 @@
+[package]
+name = "dylink"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+crate-type = ["dylib"]
+path = "lib.rs"
+
+[dependencies]
+deps = { path = "../deps" }
