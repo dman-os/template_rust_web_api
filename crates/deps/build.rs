@@ -1,6 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=Cargo.toml");
-
     use std::io::Write;
     std::fs::OpenOptions::new()
         .write(true)
@@ -14,14 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?
             .dependencies
             .iter()
-            .map(|(name, meta)| {
+            .map(|(name, _)| {
                 format!("pub use {};\n", {
                     // if alias specified, use that
-                    meta.package()
-                        .map(|n| n.to_owned())
-                        // or use the pacakge name otherwise
-                        // replace dashes with underscores
-                        .unwrap_or_else(|| name.replace("-", "_"))
+                    name.replace('-', "_")
                 })
             })
             .collect::<String>()

@@ -1,0 +1,96 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'xtask'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=xtask",
+                    "--package=xtask"
+                ],
+                "filter": {
+                    "name": "xtask",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'template_web_api_rust'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=template_web_api_rust",
+                    "--package=template_web_api_rust"
+                ],
+                "filter": {
+                    "name": "template_web_api_rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "LD_LIBRARY_PATH": "${workspaceFolder}/target/debug:/home/asdf/.rustup/toolchains/nightly-2022-08-05-x86_64-unknown-linux-gnu/lib/"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'template_web_api_rust'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=template_web_api_rust",
+                    "--package=template_web_api_rust"
+                ],
+                "filter": {
+                    "name": "template_web_api_rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            // pending on https://github.com/vadimcn/vscode-lldb/issues/506
+            // "envFile": ".env",
+            "env": {
+                "LD_LIBRARY_PATH": "${workspaceFolder}/target/debug:/home/asdf/.rustup/toolchains/nightly-2022-08-05-x86_64-unknown-linux-gnu/lib/",
+                "TEST_DB_USER": "web_api",
+                "TEST_DB_PASS": "password",
+                "TEST_DB_HOST": "localhost",
+                "TEST_DB_PORT": "5432"
+            }
+        }
+        /* {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'template_web_api_rust'",
+            "cargo": {
+                "args": [
+                    "xtask",
+                    "test",
+                    "--",
+                    // "--no-run",
+                    "--bin=template_web_api_rust",
+                    "--package=template_web_api_rust"
+                ],
+                "filter": {
+                    "name": "template_web_api_rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        } */
+    ]
+}

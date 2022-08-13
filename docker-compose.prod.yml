@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+    # web:
+    #     # restart: always
+    #     # deploy:
+    #     # mode: replicated
+    #     # replicas: 3
+    #     # restart_policy:
+    #     # condition: on-failure
+    #     env_file:
+    #         - .env
+    #     #logging:
+    #         #driver: "json-file"
+    #         #options:
+    #             #max-size: "200k"
+    #             #max-file: "10"
+    #     expose:
+    #         - "3000"
+    #     ports:
+    #         - "3000:3000"
+    postgres:
+        env_file:
+            - .env
+        restart: always
+    # redis:
+    #     env_file:
+    #         - .env
+    #     restart: always
+    #     deploy:
+            # TODO: research sane limits
+            # resources:
+            # limits:
+            # cpus: "0.50"
+            # memory: 50M
+            # reservations:
+            # cpus: "0.25"
+            # memory: 20M

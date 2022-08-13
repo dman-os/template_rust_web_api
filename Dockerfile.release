@@ -1,0 +1,12 @@
+# replace me with stable
+FROM docker.io/library/rust:1.62-slim as builder
+WORKDIR /srv/app
+RUN cargo install sqlx-cli --no-default-features --features postgres --locked
+
+# replace me with slim
+FROM docker.io/library/rust:1.62-slim as planner
+## we need access to cargo-sqlx
+COPY --from=builder $CARGO_HOME/bin /usr/local/bin
+COPY migrations/ migrations/
+ARG DATABASE_URL
+CMD sqlx mig run

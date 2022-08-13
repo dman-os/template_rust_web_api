@@ -1,0 +1,43 @@
+version: "3.9"
+
+# this just launches posrgres and redis and exposes the ports locally
+# Use devcontainer to develop inside the container
+services:
+  # web:
+  #   profiles:
+  #     - disabled
+  #   restart: "no"
+  #   deploy:
+  #     replicas: 0 # disable the api.
+    #image: registry.heroku.com/my-rust-api/web
+
+  postgres:
+    container_name: postgres-server-dev
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+
+  # pgadmin:
+  #   deploy:
+  #     replicas: 0 # disable pgadmin
+  #   container_name: pgadmin-server-dev
+  #   image: dpage/pgadmin4:latest
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     PGADMIN_DEFAULT_PASSWORD: ${DB_ADMIN_PASSWORD:-postgres}
+  #     PGADMIN_DEFAULT_EMAIL: ${DB_ADMIN_EMAIL:-pg@pg.com}
+  #   # restart: unless-stopped
+  #   ports:
+  #     - "5050:80"
+  #     - "443:443"
+  #   networks:
+  #     - net-one
+
+  # redis:
+  #   container_name: redis-server-dev
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - "6379:6379"

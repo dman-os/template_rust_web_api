@@ -1,0 +1,29 @@
+FROM docker.io/library/rust:1.62-slim as planner
+WORKDIR /srv/app
+RUN cargo install cargo-chef --debug --locked
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM docker.io/library/rust:1.62-alpine as cacher
+WORKDIR /srv/app
+RUN cargo install cargo-chef --debug --locked
+COPY --from=planner /srv/app/recipe.json recipe.json
+# RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --recipe-path recipe.json
+
+FROM docker.io/library/rust:1.62-slim as builder
+WORKDIR /srv/app
+COPY . .
+# Copy over the cached dependencies
+COPY --from=cacher /srv/app/target target
+COPY --from=cacher $CARGO_HOME $CARGO_HOME
+ENV SQLX_OFFLINE=true
+# RUN cargo build --release --no-default-features 
+RUN cargo build --no-default-features 
+
+# replace me with slim
+FROM docker.io/library/rust:1.62-slim as runtime
+WORKDIR /srv/app
+# COPY --from=builder /srv/app/target/debug/web /srv/app/target/debug/worker /usr/local/bin/
+COPY --from=builder /srv/app/target/debug/web /usr/local/bin/
+CMD web

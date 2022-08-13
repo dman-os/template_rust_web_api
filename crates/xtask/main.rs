@@ -19,22 +19,37 @@ enum Commands {
     },
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
+    // use std::os::unix::process::*;
+    dotenvy::dotenv().ok();
+
     let args = Cli::parse();
-    let mut cargo_cmd = std::env::var("XTASK_CARGO_CMD")
-        .map(|cmd| std::process::Command::new(cmd))
-        .unwrap_or_else(|_| {
-            if let Ok(_) = std::process::Command::new("mold").output() {
-                let mut cmd = std::process::Command::new("mold");
-                cmd.args(["-run cargo"]);
-                cmd
-            } else {
-                std::process::Command::new("cargo")
-            }
-        });
+    /* let mut cargo_bin = std::process::Command::new(
+        std::env::var("XTASK_CARGO_BIN").unwrap_or_else(|_| "cargo".into()),
+    ); */
     match args.commands {
         Commands::Test { args } => {
-            println!("TODO: nextest support");
+            let mut cmd = if std::process::Command::new("cargo") 
+                .arg("nextest --version")
+                .output()
+                .is_ok()
+            {
+                let mut cmd = std::process::Command::new("cargo");
+                cmd.args(["nextest", "run"]);
+                cmd
+            } else {
+                let mut cmd = std::process::Command::new("cargo");
+                cmd.args(["test"]);
+                cmd
+            };
+            if let Some(args) = args {
+                cmd.arg(&args);
+            }
+            let status = cmd.status().unwrap();
+            if !status.success() {
+                return Ok(std::process::ExitCode::FAILURE);
+            }
+
             // cargo_cmd.args([
             //     "nextest",
             //     args.as_deref().unwrap_or("run"),
@@ -42,5 +57,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // cargo_cmd.output()?;
         }
     }
-    Ok(())
+    Ok(std::process::ExitCode::SUCCESS)
 }

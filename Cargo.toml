@@ -1,5 +1,5 @@
 [package]
-name = "rust-template-basic"
+name = "template_web_api_rust"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,6 +12,16 @@ default = ["dylink"]
 [dependencies]
 deps = { path = "crates/deps" }
 dylink = { path = "crates/dylink", optional = true }
+sqlx = { version = "0.6.1", features = [
+        "postgres",
+        "runtime-tokio-rustls",
+        "time",
+        "uuid",
+        "macros",
+        "json",
+        "migrate",
+        "offline"
+] }
 
 [profile.dev]
 # debug = false
@@ -21,3 +31,7 @@ dylink = { path = "crates/dylink", optional = true }
 # opt-level = 3
 
 [patch.crates-io]
+utoipa = { git = "https://github.com/juhaku/utoipa" }
+utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa" }
+# utoipa = { path = "../utoipa" }
+# utoipa-swagger-ui = { path = "../utoipa" }
