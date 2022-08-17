@@ -1,24 +1,24 @@
 version: "3.9"
 
 services:
-    # web:
-    #     # restart: always
-    #     # deploy:
-    #     # mode: replicated
-    #     # replicas: 3
-    #     # restart_policy:
-    #     # condition: on-failure
-    #     env_file:
-    #         - .env
-    #     #logging:
-    #         #driver: "json-file"
-    #         #options:
-    #             #max-size: "200k"
-    #             #max-file: "10"
-    #     expose:
-    #         - "3000"
-    #     ports:
-    #         - "3000:3000"
+    web:
+        # restart: always
+        # deploy:
+        # mode: replicated
+        # replicas: 3
+        # restart_policy:
+        # condition: on-failure
+        env_file:
+            - .env
+        #logging:
+            #driver: "json-file"
+            #options:
+                #max-size: "200k"
+                #max-file: "10"
+        expose:
+            - "8080"
+        ports:
+            - "8080:8080"
     postgres:
         env_file:
             - .env

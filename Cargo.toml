@@ -3,6 +3,11 @@ name = "template_web_api_rust"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "web"
+test = false
+bench = false
+
 [workspace]
 members = ["crates/*"]
 
@@ -31,7 +36,7 @@ sqlx = { version = "0.6.1", features = [
 # opt-level = 3
 
 [patch.crates-io]
-utoipa = { git = "https://github.com/juhaku/utoipa" }
-utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa" }
+utoipa = { git = "https://github.com/juhaku/utoipa", rev = "6e3cb4b9be5072108e999b982b17ffae117d65ac" }
+utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa", rev = "6e3cb4b9be5072108e999b982b17ffae117d65ac" }
 # utoipa = { path = "../utoipa" }
 # utoipa-swagger-ui = { path = "../utoipa" }

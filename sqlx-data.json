@@ -1,0 +1,53 @@
+{
+  "db": "PostgreSQL",
+  "7aeb9fd186504ad8a02e8221ce890d1ac9f0b9d817b5cfd8bcaa1ddbd21402c7": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "email!",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "username!",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "pic_url",
+          "ordinal": 5,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        null,
+        null,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\nSELECT id,\n    created_at,\n    updated_at,\n    email::TEXT as \"email!\",\n    username::TEXT as \"username!\",\n    pic_url\nFROM users\nWHERE id = $1::uuid\n            "
+  }
+}

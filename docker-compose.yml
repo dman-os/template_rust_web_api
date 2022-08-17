@@ -1,17 +1,17 @@
 version: "3.9"
 
 services:
-  # web:
-  #   container_name: web-api 
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.web
-  #   # restart: unless-stopped
-  #   networks:
-  #     - net-one
-  #   depends_on:
-  #     - redis
-  #     - postgres
+  web:
+    container_name: web-api 
+    build:
+      context: .
+      dockerfile: Containerfile.web
+    # restart: unless-stopped
+    networks:
+      - net-one
+    depends_on:
+      # - redis
+      - postgres
   postgres:
     container_name: postgres-server
     image: docker.io/library/postgres:14-alpine

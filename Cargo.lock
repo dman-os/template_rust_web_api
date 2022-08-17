@@ -2154,7 +2154,7 @@ dependencies = [
 [[package]]
 name = "utoipa"
 version = "1.1.0"
-source = "git+https://github.com/juhaku/utoipa#6e3cb4b9be5072108e999b982b17ffae117d65ac"
+source = "git+https://github.com/juhaku/utoipa?rev=6e3cb4b9be5072108e999b982b17ffae117d65ac#6e3cb4b9be5072108e999b982b17ffae117d65ac"
 dependencies = [
  "serde",
  "serde_json",
@@ -2164,7 +2164,7 @@ dependencies = [
 [[package]]
 name = "utoipa-gen"
 version = "1.1.0"
-source = "git+https://github.com/juhaku/utoipa#6e3cb4b9be5072108e999b982b17ffae117d65ac"
+source = "git+https://github.com/juhaku/utoipa?rev=6e3cb4b9be5072108e999b982b17ffae117d65ac#6e3cb4b9be5072108e999b982b17ffae117d65ac"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -2176,7 +2176,7 @@ dependencies = [
 [[package]]
 name = "utoipa-swagger-ui"
 version = "1.1.0"
-source = "git+https://github.com/juhaku/utoipa#6e3cb4b9be5072108e999b982b17ffae117d65ac"
+source = "git+https://github.com/juhaku/utoipa?rev=6e3cb4b9be5072108e999b982b17ffae117d65ac#6e3cb4b9be5072108e999b982b17ffae117d65ac"
 dependencies = [
  "axum",
  "mime_guess",

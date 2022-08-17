@@ -1,14 +1,14 @@
 version: "3.9"
 
 # this just launches posrgres and redis and exposes the ports locally
-# Use devcontainer to develop inside the container
+# TODO: use devcontainer to develop inside the container
 services:
-  # web:
-  #   profiles:
-  #     - disabled
-  #   restart: "no"
-  #   deploy:
-  #     replicas: 0 # disable the api.
+  web:
+    profiles:
+      - disabled
+    restart: "no"
+    deploy:
+      replicas: 0 # disable the api.
     #image: registry.heroku.com/my-rust-api/web
 
   postgres:
