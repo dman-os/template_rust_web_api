@@ -29,7 +29,7 @@ fn main() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
     ); */
     match args.commands {
         Commands::Test { args } => {
-            let mut cmd = if std::process::Command::new("cargo") 
+            let mut cmd = if std::process::Command::new("cargo")
                 .arg("nextest --version")
                 .output()
                 .is_ok()

@@ -1,4 +1,4 @@
-
+-- strings use single quotes
 BEGIN;
 
 DO $body$
@@ -14,6 +14,12 @@ DO $body$
             'hex.queen@teen.dj',
             'https://obj.teen.dj/d78xas'
         ) RETURNING * INTO le_user;
+        INSERT INTO credentials (
+            user_id, pass_hash
+        ) VALUES ( 
+            le_user.id, 
+            '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
+        );
     END;
 $body$ LANGUAGE PLpgSQL;
 
@@ -29,6 +35,12 @@ DO $body$
             'archie1941@poetry.ybn',
             'https://pictu.res/01'
         ) RETURNING * INTO le_user;
+        INSERT INTO credentials (
+            user_id, pass_hash
+        ) VALUES ( 
+            le_user.id, 
+            '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
+        );
     END;
 $body$ LANGUAGE PLpgSQL;
 
@@ -44,6 +56,12 @@ DO $body$
             'pInXy@melt.shake',
             null
         ) RETURNING * INTO le_user;
+        INSERT INTO credentials (
+            user_id, pass_hash
+        ) VALUES ( 
+            le_user.id, 
+            '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
+        );
     END;
 $body$ LANGUAGE PLpgSQL;
 
@@ -59,6 +77,12 @@ DO $body$
             'trekkiegirl@ln.pi',
             'ipns://goatsie'
         ) RETURNING * INTO le_user;
+        INSERT INTO credentials (
+            user_id, pass_hash
+        ) VALUES ( 
+            le_user.id, 
+            '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
+        );
     END;
 $body$ LANGUAGE PLpgSQL;
 

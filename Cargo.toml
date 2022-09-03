@@ -1,5 +1,6 @@
 [package]
-name = "template_web_api_rust"
+name = "template_rust_web_api"
+description = "Opinion template repository for an HTTP API."
 version = "0.1.0"
 edition = "2021"
 
@@ -17,6 +18,7 @@ default = ["dylink"]
 [dependencies]
 deps = { path = "crates/deps" }
 dylink = { path = "crates/dylink", optional = true }
+shadow-rs = "0.16.3"
 sqlx = { version = "0.6.1", features = [
         "postgres",
         "runtime-tokio-rustls",
@@ -36,7 +38,10 @@ sqlx = { version = "0.6.1", features = [
 # opt-level = 3
 
 [patch.crates-io]
-utoipa = { git = "https://github.com/juhaku/utoipa", rev = "6e3cb4b9be5072108e999b982b17ffae117d65ac" }
-utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa", rev = "6e3cb4b9be5072108e999b982b17ffae117d65ac" }
+
+[build-dependencies]
+shadow-rs = "0.16.3"
+# utoipa = { git = "https://github.com/juhaku/utoipa", rev = "6431c28" }
+# utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa", rev = "6431c28" }
 # utoipa = { path = "../utoipa" }
 # utoipa-swagger-ui = { path = "../utoipa" }

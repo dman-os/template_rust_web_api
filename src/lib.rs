@@ -7,6 +7,18 @@ use dylink;
 use deps::*;
 
 pub mod macros;
+pub mod user;
+pub mod utils;
+
+use crate::utils::*;
+
+use std::future::Future;
+
+pub(crate) use axum::http::StatusCode;
+use axum::{
+    extract::*,
+    response::{self, IntoResponse},
+};
 
 pub fn setup_tracing() -> eyre::Result<()> {
     color_eyre::install()?;
@@ -36,433 +48,356 @@ pub struct Context {
 
 pub type SharedContext = std::sync::Arc<Context>;
 
-pub mod user {
-    use deps::*;
+shadow_rs::shadow!(build);
 
-    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-    #[serde(crate = "serde", rename_all = "camelCase")]
-    pub struct User {
-        pub id: uuid::Uuid,
-        /// In seconds since unix epoch in UTC.
-        #[schema(example = 1234567)]
-        #[serde(with = "time::serde::timestamp")]
-        pub created_at: time::OffsetDateTime,
-        /// In seconds since unix epoch in UTC.
-        #[schema(example = 1234567)]
-        #[serde(with = "time::serde::timestamp")]
-        pub updated_at: time::OffsetDateTime,
-        #[schema(example = "alice@example.com")]
-        pub email: String,
-        #[schema(example = "hunter2")]
-        pub username: String,
-        pub pic_url: Option<String>,
-    }
+pub struct ApiDoc;
+impl utoipa::OpenApi for ApiDoc {
+    fn openapi() -> utoipa::openapi::OpenApi {
+        let mut openapi = utoipa::openapi::OpenApiBuilder::new()
+            .info(
+                utoipa::openapi::InfoBuilder::new()
+                    .title(build::PROJECT_NAME)
+                    .version(build::PKG_VERSION)
+                    .description(Some(format!(
+                        r#"{}
 
-    pub fn router() -> axum::Router {
-        axum::Router::new().route("/users/:id", axum::routing::get(get::http))
-    }
-
-    #[cfg(test)]
-    pub mod testing {
-        pub const USER_01_ID: &'static str = "add83cdf-2ab3-443f-84dd-476d7984cf75";
-        pub const USER_02_ID: &'static str = "ce4fe993-04d6-462e-af1d-d734fcc9639d";
-        pub const USER_03_ID: &'static str = "d437e73f-4610-462c-ab22-f94b76bba83a";
-        pub const USER_04_ID: &'static str = "68cf4d43-62d2-4202-8c50-c79a5f4dd1cc";
-
-        pub const USER_01_USERNAME: &'static str = "sabrina";
-        pub const USER_02_USERNAME: &'static str = "archie";
-        pub const USER_03_USERNAME: &'static str = "betty";
-        pub const USER_04_USERNAME: &'static str = "veronica";
-
-        pub const USER_01_EMAIL: &'static str = "hex.queen@teen.dj";
-        pub const USER_02_EMAIL: &'static str = "archie1941@poetry.ybn";
-        pub const USER_03_EMAIL: &'static str = "pInXy@melt.shake";
-        pub const USER_04_EMAIL: &'static str = "trekkiegirl@ln.pi";
-    }
-
-    pub mod get {
-        use deps::*;
-
-        use axum::response::{self, IntoResponse};
-
-        use super::User;
-
-        pub struct Request {
-            pub id: uuid::Uuid,
-        }
-
-        pub type Response = User;
-
-        #[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
-        #[serde(crate = "serde", tag = "error", rename_all = "camelCase")]
-        pub enum Error {
-            #[error("not found at id: {id:?}")]
-            NotFound { id: uuid::Uuid },
-            #[error("acess denied")]
-            AccessDenied,
-            #[error("server error: {message:?}")]
-            ServerError { message: String },
-        }
-
-        pub async fn handle(ctx: &crate::Context, request: Request) -> Result<Response, Error> {
-            sqlx::query_as!(
-                User,
-                r#"
-SELECT id,
-    created_at,
-    updated_at,
-    email::TEXT as "email!",
-    username::TEXT as "username!",
-    pic_url
-FROM users
-WHERE id = $1::uuid
-            "#,
-                &request.id
+Notes:
+- Time values are integers despite the `string($date-time)` note they get
+                        "#,
+                        build::PKG_DESCRIPTION
+                    )))
+                    .build(),
             )
-            .fetch_one(&ctx.db_pool)
-            .await
-            .map_err(|err| match err {
-                sqlx::Error::RowNotFound => Error::NotFound { id: request.id },
-                _ => Error::ServerError {
-                    message: format!("{err}"),
-                },
+            .paths({
+                let builder = utoipa::openapi::path::PathsBuilder::new();
+                let builder = user::paths(builder);
+                builder
             })
+            .components(Some({
+                let builder = utoipa::openapi::ComponentsBuilder::new();
+                let builder = user::components(builder);
+                builder.build()
+            }))
+            .tags(Some([user::TAG.into(), DEFAULT_TAG.into()]))
+            .build();
+        if let Some(components) = openapi.components.as_mut() {
+            use utoipa::openapi::security::*;
+            components.add_security_scheme(
+                "api_key",
+                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("todo_apikey"))),
+            )
         }
+        openapi
+    }
+}
 
-        /// Get the user under the givem id.
-        #[utoipa::path(
-            get,
-            path = "/users/{id}",
-            operation_id = "get_user",
-            tag = "user",
-            params(
-                (
-                    "id" = uuid::Uuid,
-                    Path,
-                )
-            ),
-            security(
-                ("api_key" = [""])
-            ),
-            responses(
-                (
-                    status = 200,
-                    description = "Success",
-                    body = Response,
-                ),
-                (
-                    status = 401,
-                    description = "Access denied",
-                    body = Error,
-                    example = json!(Error::AccessDenied)
-                ),
-                (
-                    status = 404,
-                    description = "Not found",
-                    body = Error,
-                    example = json!(
-                        Error::NotFound { id: Default::default() }
-                    )
-                ),
-                (
-                    status = 500,
-                    description = "Server error",
-                    body = Error,
-                    example = json!(
-                        Error::ServerError { message: "internal server error".to_string() }
-                    )
-                ),
-            ),
-        )]
-        #[tracing::instrument(skip(ctx))]
-        pub async fn http(
-            id: axum::extract::Path<uuid::Uuid>,
-            ctx: axum::Extension<crate::SharedContext>,
-        ) -> response::Response {
-            match handle(&ctx, Request { id: *id }).await {
+#[async_trait::async_trait]
+pub trait Endpoint: Clone + Send + Sync + 'static
+where
+    for<'a> &'a Self::Error: Into<StatusCode>,
+{
+    type Request: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static;
+    type Response: serde::Serialize + Send + Sized + 'static;
+    type Error: serde::Serialize + Send + Sized + 'static;
+
+    const METHOD: Method;
+    const PATH: &'static str;
+
+    async fn handle(
+        self,
+        ctx: &crate::Context,
+        request: Self::Request,
+    ) -> Result<Self::Response, Self::Error>;
+
+    fn route(&self) -> axum::Router {
+        use utoipa::openapi::PathItemType;
+        let wrapper = EndpointWrapper::new(self.clone());
+        let method = match Self::METHOD {
+            PathItemType::Get => axum::routing::get(wrapper),
+            PathItemType::Post => axum::routing::post(wrapper),
+            PathItemType::Put => axum::routing::put(wrapper),
+            PathItemType::Delete => axum::routing::delete(wrapper),
+            PathItemType::Options => axum::routing::options(wrapper),
+            PathItemType::Head => axum::routing::head(wrapper),
+            PathItemType::Patch => axum::routing::patch(wrapper),
+            PathItemType::Trace => axum::routing::trace(wrapper),
+            PathItemType::Connect => todo!(),
+        };
+        axum::Router::new().route(Self::PATH, method)
+    }
+
+    fn http(
+        &self,
+        req: hyper::Request<hyper::Body>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = axum::response::Response> + Send>> {
+        let this = self.clone();
+        Box::pin(async move {
+            let mut req_parts = axum::extract::RequestParts::new(req);
+            let req = match Self::Request::from_request(&mut req_parts).await {
+                Ok(val) => val,
+                Err(err) => return err.into_response(),
+            };
+            let Extension(ctx) =
+                match Extension::<crate::SharedContext>::from_request(&mut req_parts).await {
+                    Ok(val) => val,
+                    Err(err) => return err.into_response(),
+                };
+            // we have to clone it or the borrow checker biches that &T is
+            match this.handle(&ctx, req).await {
                 Ok(ok) => response::Json(ok).into_response(),
-                Err(err) => {
-                    use axum::http::StatusCode;
-                    use Error::*;
-                    (
-                        match &err {
-                            NotFound { .. } => StatusCode::NOT_FOUND,
-                            AccessDenied => StatusCode::UNAUTHORIZED,
-                            ServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-                        },
-                        response::Json(err),
+                Err(err) => (Into::<StatusCode>::into(&err), response::Json(err)).into_response(),
+            }
+        })
+    }
+}
+
+/// (statuscode, description, example)
+pub type SuccessResponse<Res> = (StatusCode, &'static str, Res);
+/// (description, example)
+pub type ErrorResponse<Err> = (&'static str, Err);
+
+pub struct Tag {
+    name: &'static str,
+    desc: &'static str,
+}
+
+impl From<Tag> for utoipa::openapi::Tag {
+    fn from(tag: Tag) -> Self {
+        utoipa::openapi::tag::TagBuilder::new()
+            .name(tag.name)
+            .description(Some(tag.desc))
+            .build()
+    }
+}
+
+pub const DEFAULT_TAG: Tag = Tag {
+    name: "api",
+    desc: "This is the catch all tag.",
+};
+
+pub fn axum_path_str_to_openapi(path: &str) -> String {
+    path.split('/')
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            if &s[0..1] == ":" {
+                format!("/{{{}}}", &s[1..])
+            } else {
+                format!("/{s}")
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn test_axum_path_str_to_openapi() {
+    for (expected, path) in [
+        ("/users/{id}", "/users/:id"),
+        ("/users/{id}/resource/{resID}", "/users/:id/resource/:resID"),
+    ] {
+        assert_eq!(
+            expected,
+            &axum_path_str_to_openapi(path)[..],
+            "failed on {path}"
+        );
+    }
+}
+
+pub trait DocumentedEndpoint<Req, Res, Err>:
+    Endpoint<Request = Req, Response = Res, Error = Err>
+where
+    Res: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
+    Err: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
+    for<'a> &'a Err: Into<StatusCode>,
+{
+    const TAG: &'static Tag = &DEFAULT_TAG;
+    const SUMMARY: &'static str = "";
+    const DESCRIPTION: &'static str = "";
+    const DEPRECATED: bool = false;
+
+    fn successs() -> Vec<SuccessResponse<Res>> {
+        vec![]
+    }
+
+    fn errors() -> Vec<ErrorResponse<Err>> {
+        vec![]
+    }
+
+    fn path_item() -> utoipa::openapi::PathItem {
+        let id = <Self as TypeNameRaw>::type_name_raw();
+        utoipa::openapi::PathItem::new(
+                Self::METHOD,
+                utoipa::openapi::path::OperationBuilder::new()
+                    .operation_id(Some(id))
+                    .deprecated(Some(if Self::DEPRECATED {
+                        utoipa::openapi::Deprecated::True
+                    } else {
+                        utoipa::openapi::Deprecated::False
+                    }))
+                    .summary(if !Self::SUMMARY.is_empty() {
+                        Some(Self::SUMMARY)
+                    } else {
+                        None
+                    })
+                    .description(if !Self::DESCRIPTION.is_empty() {
+                        Some(Self::DESCRIPTION)
+                    } else {
+                        None
+                    })
+                    .tag(Self::TAG.name)
+                    .securities(Some([
+                        utoipa::openapi::security::SecurityRequirement::new::<
+                            &str,
+                            [&str; 1usize],
+                            &str,
+                        >("api_key", [""]),
+                    ]))
+                    .parameter(
+                        utoipa::openapi::path::ParameterBuilder::new()
+                            .name("id")
+                            .parameter_in(utoipa::openapi::path::ParameterIn::Path)
+                            .required(utoipa::openapi::Required::True)
+                            .schema(Some(
+                                utoipa::openapi::ObjectBuilder::new()
+                                    .schema_type(utoipa::openapi::SchemaType::String)
+                                    .format(Some(utoipa::openapi::SchemaFormat::Uuid)),
+                            )),
                     )
-                        .into_response()
-                }
-            }
-        }
+                    .responses({
+                        let mut builder = utoipa::openapi::ResponsesBuilder::new();
+                        for (code, desc, resp) in &Self::successs() {
+                            builder = builder.response(
+                                code.to_string(),
+                                utoipa::openapi::ResponseBuilder::new()
+                                    .description(*desc)
+                                    .content(
+                                        "application/json",
+                                        utoipa::openapi::ContentBuilder::new()
+                                            .schema(utoipa::openapi::Ref::from_schema_name(
+                                                format!("{id}Response"),
+                                            ))
+                                            .example(Some(serde_json::to_value(resp).unwrap()))
+                                            .build(),
+                                    )
+                                    .build(),
+                            );
+                        }
+                        for (desc, err) in &Self::errors() {
+                            builder = builder.response(
+                                Into::<StatusCode>::into(err).to_string(),
+                                utoipa::openapi::ResponseBuilder::new()
+                                    .description(*desc)
+                                    .content(
+                                        "application/json",
+                                        utoipa::openapi::ContentBuilder::new()
+                                            .schema(utoipa::openapi::Ref::from_schema_name(
+                                                format!("{id}Error"),
+                                            ))
+                                            .example(Some(serde_json::to_value(err).unwrap()))
+                                            .build(),
+                                    )
+                                    .build(),
+                            );
+                        }
+                        builder.build()
+                    }),
+            )
+    }
 
-        #[cfg(test)]
-        mod tests {
-            use deps::*;
+    fn components(
+        builder: utoipa::openapi::ComponentsBuilder,
+    ) -> utoipa::openapi::ComponentsBuilder {
+        let id = <Self as TypeNameRaw>::type_name_raw();
+        builder
+            .schema(format!("{id}Response"), <Res as utoipa::ToSchema>::schema())
+            .schemas_from_iter(<Res as utoipa::ToSchema>::aliases())
+            .schema(format!("{id}Error"), <Err as utoipa::ToSchema>::schema())
+            .schemas_from_iter(<Err as utoipa::ToSchema>::aliases())
+    }
+}
 
-            use crate::user::testing::*;
-            use crate::utils::testing::*;
+pub type Method = utoipa::openapi::PathItemType;
 
-            use axum::http::{Request, StatusCode};
-            use tower::ServiceExt;
+// pub struct DocParameterBuilder {
+//     inner: utoipa::openapi::path::ParameterBuilder,
+// }
+// pub enum ParamExample<T> {
+//     Query(T),
+//     Path(T),
+//     Header(T),
+//     Cookie(T),
+// }
+// impl DocParameterBuilder {
+//     pub fn new<T>(name: &'static str, example: ) -> Self {
+//         Self {
+//             inner: utoipa::openapi::path::ParameterBuilder::new().name(name)
+//         }
+//     }
+//     pub fn build(self: Self) -> Parameter {
+//         todo!()
+//     }
+// }
 
-            #[tokio::test]
-            async fn get_user_works() {
-                let ctx = TestContext::new(crate::function!()).await;
-                {
-                    let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
+/// This is used to get around Rust orphaning rules. This allow us
+/// to implement any foreign traits lik `axum::handler::Handler` for any `T`
+/// that implements `Endpoint`
+#[derive(educe::Educe)]
+#[educe(Deref, DerefMut)]
+pub struct EndpointWrapper<T> {
+    inner: T,
+}
 
-                    let resp = app
-                        .oneshot(
-                            Request::builder()
-                                .uri(format!("/users/{USER_01_ID}"))
-                                .body(Default::default())
-                                .unwrap_or_log(),
-                        )
-                        .await
-                        .unwrap_or_log();
-                    assert_eq!(resp.status(), StatusCode::OK);
-                    let body = resp.into_body();
-                    let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-                    let body = serde_json::from_slice(&body).unwrap_or_log();
-                    check_json(
-                        (
-                            "expected",
-                            &serde_json::json!({
-                                "id": USER_01_ID,
-                                "username": USER_01_USERNAME,
-                                "email": USER_01_EMAIL,
-                            }),
-                        ),
-                        ("response", &body),
-                    );
-                }
-                ctx.close().await;
-            }
+impl<T, Req, Res, Err> EndpointWrapper<T>
+where
+    T: Endpoint<Request = Req, Response = Res, Error = Err> + Clone + Send + Sized + 'static,
+    Req: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static,
+    Res: serde::Serialize + Send + Sized + 'static,
+    Err: Send + Sized + 'static,
+    for<'a> &'a Err: Into<StatusCode>,
+{
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+impl<T> Clone for EndpointWrapper<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
         }
     }
 }
 
-mod utils {
-    use deps::*;
+impl<T, Req, Res, Err> axum::handler::Handler<Req> for EndpointWrapper<T>
+where
+    T: Endpoint<Request = Req, Response = Res, Error = Err> + Clone + Send + Sized + 'static,
+    Req: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static,
+    Res: serde::Serialize + Send + Sized + 'static,
+    Err: serde::Serialize + Send + Sized + 'static,
+    for<'a> &'a Err: Into<StatusCode>,
+{
+    type Future = std::pin::Pin<Box<dyn Future<Output = axum::response::Response> + Send>>;
 
-    /* #[derive(serde::Serialize, utoipa::ToSchema)]
-    #[serde(crate = "serde", rename_all = "camelCase")]
-    pub struct ErrorResponse<T> {
-        pub code: u16,
-        #[serde(flatten)]
-        pub err: T,
+    fn call(self, req: hyper::Request<hyper::Body>) -> Self::Future {
+        self.http(req)
+    }
+}
+
+impl<T, Req, Res, Err> utoipa::Path for EndpointWrapper<T>
+where
+    T: Endpoint<Request = Req, Response = Res, Error = Err> + DocumentedEndpoint<Req, Res, Err>,
+    Req: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static,
+    Res: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
+    Err: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
+    for<'a> &'a Err: Into<StatusCode>,
+{
+    fn path() -> &'static str {
+        <T as Endpoint>::PATH
     }
 
-    impl<T> ErrorResponse<T> {
-        pub const fn new(code: u16, err: T) -> Self {
-            Self { code, err }
-        }
-    } */
-
-    #[cfg(test)]
-    pub mod testing {
-        use deps::*;
-
-        use crate::{Context, SharedContext};
-
-        pub fn setup_tracing() -> eyre::Result<()> {
-            color_eyre::install()?;
-            if std::env::var("RUST_LOG_TEST").is_err() {
-                std::env::set_var("RUST_LOG_TEST", "info");
-            }
-
-            tracing_subscriber::fmt()
-                // .pretty()
-                .compact()
-                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-                .with_timer(tracing_subscriber::fmt::time::uptime())
-                .try_init()
-                .map_err(|err| eyre::eyre!(err))?;
-
-            Ok(())
-        }
-
-        // Ensure that the `tracing` stack is only initialised once using `once_cell`
-        // isn't required in cargo-nextest since each test runs in a new process
-        pub fn setup_tracing_once() {
-            use once_cell::sync::Lazy;
-            static TRACING: Lazy<()> = Lazy::new(|| {
-                dotenvy::dotenv().ok();
-                setup_tracing().unwrap();
-            });
-            Lazy::force(&TRACING);
-        }
-
-        pub struct TestContext {
-            pub test_name: &'static str,
-            ctx: Option<SharedContext>,
-            // clean_up_closure: Option<Box<dyn FnOnce(Context) -> ()>>,
-            clean_up_closure:
-                Option<Box<dyn FnOnce(Context) -> futures::future::BoxFuture<'static, ()>>>,
-        }
-
-        impl TestContext {
-            pub async fn new(test_name: &'static str) -> Self {
-                setup_tracing_once();
-
-                let config = crate::Config {};
-
-                use sqlx::prelude::*;
-                let opts = sqlx::postgres::PgConnectOptions::default()
-                    .host(
-                        std::env::var("TEST_DB_HOST")
-                            .expect("TEST_DB_HOST wasn't found in enviroment")
-                            .as_str(),
-                    )
-                    .port(
-                        std::env::var("TEST_DB_PORT")
-                            .expect("TEST_DB_PORT wasn't found in enviroment")
-                            .parse()
-                            .expect("TEST_DB_PORT is not a valid number"),
-                    )
-                    .username(
-                        std::env::var("TEST_DB_USER")
-                            .expect("TEST_DB_USER wasn't found in enviroment")
-                            .as_str(),
-                    );
-
-                let mut opts = if let Some(pword) = std::env::var("TEST_DB_PASS").ok() {
-                    opts.password(pword.as_str())
-                } else {
-                    opts
-                };
-                opts.log_statements("DEBUG".parse().unwrap());
-
-                let mut connection = opts
-                    .connect()
-                    .await
-                    .expect("Failed to connect to Postgres without db");
-
-                connection
-                    .execute(&format!(r###"DROP DATABASE IF EXISTS {}"###, test_name)[..])
-                    .await
-                    .expect("Failed to drop old database.");
-
-                connection
-                    .execute(&format!(r###"CREATE DATABASE {}"###, test_name)[..])
-                    .await
-                    .expect("Failed to create database.");
-
-                let opts = opts.database(test_name);
-
-                // migrate database
-                let db_pool = sqlx::PgPool::connect_with(opts)
-                    .await
-                    .expect("Failed to connect to Postgres as test db.");
-
-                sqlx::migrate!("./migrations")
-                    .run(&db_pool)
-                    .await
-                    .expect("Failed to migrate the database");
-
-                sqlx::migrate!("./fixtures")
-                    .set_ignore_missing(true) // don't inspect migrations store
-                    .run(&db_pool)
-                    .await
-                    .expect("Failed to add test data");
-
-                let ctx = Context { db_pool, config };
-                Self {
-                    test_name,
-                    ctx: Some(std::sync::Arc::new(ctx)),
-                    /* clean_up_closure: Some(Box::new(move |ctx| {
-                        futures::executor::block_on(async move {
-                            ctx.db_pool.close().await;
-
-                            tracing::info!("got here: {}", ctx.db_pool.size());
-                            tokio::time::timeout(
-                                std::time::Duration::from_secs(1),
-                                connection
-                                    .execute(&format!(r###"DROP DATABASE {test_name}"###)[..]),
-                            )
-                            .await
-                            .expect("Timeout when dropping test database.")
-                            .expect("Failed to drop test database.");
-                            tracing::info!("got here");
-                        })
-                    })), */
-                    clean_up_closure: Some(Box::new(move |ctx| {
-                        Box::pin(async move {
-                            ctx.db_pool.close().await;
-                            connection
-                                .execute(&format!(r###"DROP DATABASE {test_name}"###)[..])
-                                .await
-                                .expect("Failed to drop test database.");
-                        })
-                    })),
-                }
-            }
-
-            pub fn ctx(&self) -> SharedContext {
-                self.ctx.clone().unwrap_or_log()
-            }
-
-            /// Call this after all holders of the [`SharedContext`] have been dropped.
-            pub async fn close(mut self) {
-                let ctx = self.ctx.take().unwrap_or_log();
-                let ctx = std::sync::Arc::<_>::try_unwrap(ctx).unwrap_or_log();
-                (self.clean_up_closure.take().unwrap())(ctx);
-            }
-            /* pub async fn new_with_service<F>(
-                test_name: &'static str,
-                cfg_callback: F,
-            ) -> (
-                Self,
-                // TestServer,
-                impl FnOnce(Self) -> futures::future::BoxFuture<'static, ()>,
-            )
-            where
-                F:Fn(& Context) -> axum::Router + 'static + Send + Sync + Clone + Copy
-            {
-                let router = cfg_callback
-                Self {
-                    test_name,
-                }
-            } */
-        }
-
-        impl Drop for TestContext {
-            fn drop(&mut self) {
-                if self.ctx.is_some() {
-                    tracing::warn!(
-                        "test context dropped without cleaning up for: {}",
-                        self.test_name
-                    )
-                }
-            }
-        }
-
-        pub fn check_json(
-            (check_name, check): (&str, &serde_json::Value),
-            (json_name, json): (&str, &serde_json::Value),
-        ) {
-            use serde_json::Value::*;
-            match (check, json) {
-                (Array(r_arr), Array(arr)) => {
-                    for ii in 0..arr.len() {
-                        check_json(
-                            (&format!("{check_name}[{ii}]"), &r_arr[ii]),
-                            (&format!("{json_name}[{ii}]"), &arr[ii]),
-                        );
-                    }
-                }
-                (Object(check), Object(response)) => {
-                    for (key, val) in check {
-                        check_json(
-                            (&format!("{check_name}.{key}"), val),
-                            (&format!("{json_name}.{key}"), &response[key]),
-                        );
-                    }
-                }
-                (check, json) => assert_eq!(check, json, "{check_name} != {json_name}"),
-            }
-        }
+    fn path_item(_: Option<&str>) -> utoipa::openapi::path::PathItem {
+        <T as DocumentedEndpoint<Req, Res, Err>>::path_item()
     }
 }

@@ -8,7 +8,7 @@ path = "lib.rs"
 
 [dependencies]
 # regex = "1.5.5"
-# rand = "0.8"
+rand = "*"
 # chrono = "0.4"
 time = { version = "0.3", features = ["serde"] }
 # flume = "0.10"
@@ -39,6 +39,7 @@ tracing-subscriber = {version = "0.3.9", features = ["env-filter", "parking_lot"
 tracing-appender = "0.2.2"
 tracing-futures = "0.2"
 
+async-trait = "*"
 futures = "0.3" 
 # futures-lite = "1.11"
 tokio = { version = "1", features = ["full", "parking_lot"] }
@@ -50,12 +51,15 @@ tower-http = { version = "*", features = ["full"] }
 hyper = { version = "*", features = ["server", "tcp", "stream", "http1"] }
 
 validator = { version = "0.16.0", features = ["derive"] }
-utoipa = { version = "1", features = ["debug", "uuid", "time", "smallvec", "axum_extras"] }
-utoipa-swagger-ui = { version = "1", features = ["axum"] }
+utoipa = { version = "2", features = ["debug", "uuid", "time", "smallvec", "axum_extras"] }
+utoipa-swagger-ui = { version = "2", features = ["axum"] }
 uuid = { version = "1", features = ["v4", "fast-rng", "serde"] }
 
 # config = { version = "0.13", features = ["toml"] }
 dotenvy = "0.15"
+argon2 = { package = "rust-argon2", version = "1.0.0" }
+redis = { version = "0.21", features = ["tokio-comp", "tokio-native-tls-comp", "streams", "connection-manager"] }
+bb8-redis = "0.11"
 
 [build-dependencies]
 cargo_toml = "0.11"

@@ -8,8 +8,8 @@ CREATE TABLE __users_core (
 
 CREATE TABLE users (
     PRIMARY KEY(id),
-    CONSTRAINT users_username_unique  UNIQUE(username),
-    CONSTRAINT users_email_unique  UNIQUE(email)
+    CONSTRAINT unique_users_username  UNIQUE(username),
+    CONSTRAINT unique_users_email  UNIQUE(email)
 ) INHERITS (__users_core);
 
 CREATE TABLE users_deleted (
