@@ -1,9 +1,6 @@
 use deps::*;
 
-use axum::{
-    extract::*,
-    response::{self, IntoResponse},
-};
+use axum::extract::*;
 
 use crate::*;
 
@@ -14,14 +11,16 @@ pub struct GetUser;
 
 #[async_trait::async_trait]
 impl crate::Endpoint for GetUser {
-    type Request = Request;
-    type Response = Response;
+    type Request = uuid::Uuid;
+    type Response = User;
     type Error = Error;
-    const METHOD: Method = Method::Get;
-    const PATH: &'static str = "/users/:id";
 
     #[tracing::instrument(skip(ctx))]
-    async fn handle(self, ctx: &crate::Context, request: Self::Request) -> Result<Response, Error> {
+    async fn handle(
+        &self,
+        ctx: &crate::Context,
+        id: Self::Request,
+    ) -> Result<Self::Response, Self::Error> {
         sqlx::query_as!(
             User,
             r#"
@@ -34,12 +33,12 @@ SELECT id,
 FROM users
 WHERE id = $1::uuid
             "#,
-            &request.id
+            &id
         )
         .fetch_one(&ctx.db_pool)
         .await
         .map_err(|err| match err {
-            sqlx::Error::RowNotFound => Error::NotFound { id: request.id },
+            sqlx::Error::RowNotFound => Error::NotFound { id },
             _ => Error::Internal {
                 message: format!("{err}"),
             },
@@ -47,16 +46,27 @@ WHERE id = $1::uuid
     }
 }
 
-impl DocumentedEndpoint<Request, Response, Error> for GetUser {
+impl HttpEndpoint for GetUser {
+    const METHOD: Method = Method::Get;
+    const PATH: &'static str = "/users/:id";
+
+    type Parameters = (Path<uuid::Uuid>,);
+
+    fn request((Path(id),): Self::Parameters) -> Self::Request {
+        id
+    }
+}
+
+impl DocumentedEndpoint for GetUser {
     const TAG: &'static crate::Tag = &super::TAG;
     const SUMMARY: &'static str = "Get the User at the given id";
 
-    fn successs() -> Vec<SuccessResponse<Response>> {
+    fn successs() -> Vec<SuccessResponse<Self::Response>> {
         use crate::user::testing::*;
         vec![(
             axum::http::StatusCode::OK,
             "Success getting User",
-            Response {
+            Self::Response {
                 id: Default::default(),
                 created_at: time::OffsetDateTime::now_utc(),
                 updated_at: time::OffsetDateTime::now_utc(),
@@ -85,29 +95,6 @@ impl DocumentedEndpoint<Request, Response, Error> for GetUser {
         ]
     }
 }
-
-#[derive(Debug, utoipa::IntoParams)]
-pub struct Request {
-    pub id: uuid::Uuid,
-}
-
-#[async_trait::async_trait]
-impl<B> FromRequest<B> for Request
-where
-    B: Send,
-{
-    type Rejection = response::Response;
-
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let Path(id) = Path::<uuid::Uuid>::from_request(req)
-            .await
-            .map_err(|err| err.into_response())?;
-
-        Ok(Self { id })
-    }
-}
-
-pub type Response = User;
 
 #[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", tag = "error", rename_all = "camelCase")]

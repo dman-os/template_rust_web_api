@@ -92,40 +92,34 @@ Notes:
 }
 
 #[async_trait::async_trait]
-pub trait Endpoint: Clone + Send + Sync + 'static
-where
-    for<'a> &'a Self::Error: Into<StatusCode>,
-{
-    type Request: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static;
-    type Response: serde::Serialize + Send + Sized + 'static;
-    type Error: serde::Serialize + Send + Sized + 'static;
-
-    const METHOD: Method;
-    const PATH: &'static str;
+pub trait Endpoint: Send + Sync + 'static {
+    type Request: Send + Sync + 'static;
+    type Response;
+    type Error;
 
     async fn handle(
-        self,
+        &self,
         ctx: &crate::Context,
         request: Self::Request,
     ) -> Result<Self::Response, Self::Error>;
+}
 
-    fn route(&self) -> axum::Router {
-        use utoipa::openapi::PathItemType;
-        let wrapper = EndpointWrapper::new(self.clone());
-        let method = match Self::METHOD {
-            PathItemType::Get => axum::routing::get(wrapper),
-            PathItemType::Post => axum::routing::post(wrapper),
-            PathItemType::Put => axum::routing::put(wrapper),
-            PathItemType::Delete => axum::routing::delete(wrapper),
-            PathItemType::Options => axum::routing::options(wrapper),
-            PathItemType::Head => axum::routing::head(wrapper),
-            PathItemType::Patch => axum::routing::patch(wrapper),
-            PathItemType::Trace => axum::routing::trace(wrapper),
-            PathItemType::Connect => todo!(),
-        };
-        axum::Router::new().route(Self::PATH, method)
-    }
+pub trait HttpEndpoint: Endpoint + Clone
+where
+    Self::Response: serde::Serialize,
+    Self::Error: serde::Serialize,
+    for<'a> &'a Self::Error: Into<StatusCode>,
+{
+    const METHOD: Method;
+    const PATH: &'static str;
+    type Parameters: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static;
 
+    /// TODO: consider making this a `From` trait bound on `Self::Error`
+    fn request(params: Self::Parameters) -> Self::Request;
+
+    /// This actally need not be a method but I guess it allows for easy behavior
+    /// modification. We ought to probably move these to the `Handler` impl
+    /// when they stabilize specialization
     fn http(
         &self,
         req: hyper::Request<hyper::Body>,
@@ -133,10 +127,11 @@ where
         let this = self.clone();
         Box::pin(async move {
             let mut req_parts = axum::extract::RequestParts::new(req);
-            let req = match Self::Request::from_request(&mut req_parts).await {
+            let req = match Self::Parameters::from_request(&mut req_parts).await {
                 Ok(val) => val,
                 Err(err) => return err.into_response(),
             };
+            let req = Self::request(req);
             let Extension(ctx) =
                 match Extension::<crate::SharedContext>::from_request(&mut req_parts).await {
                     Ok(val) => val,
@@ -202,23 +197,22 @@ fn test_axum_path_str_to_openapi() {
     }
 }
 
-pub trait DocumentedEndpoint<Req, Res, Err>:
-    Endpoint<Request = Req, Response = Res, Error = Err>
+pub trait DocumentedEndpoint: HttpEndpoint + Sized
 where
-    Res: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
-    Err: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
-    for<'a> &'a Err: Into<StatusCode>,
+    Self::Response: utoipa::ToSchema + serde::Serialize,
+    Self::Error: utoipa::ToSchema + serde::Serialize,
+    for<'a> &'a Self::Error: Into<StatusCode>,
 {
     const TAG: &'static Tag = &DEFAULT_TAG;
     const SUMMARY: &'static str = "";
     const DESCRIPTION: &'static str = "";
     const DEPRECATED: bool = false;
 
-    fn successs() -> Vec<SuccessResponse<Res>> {
+    fn successs() -> Vec<SuccessResponse<Self::Response>> {
         vec![]
     }
 
-    fn errors() -> Vec<ErrorResponse<Err>> {
+    fn errors() -> Vec<ErrorResponse<Self::Error>> {
         vec![]
     }
 
@@ -308,10 +302,16 @@ where
     ) -> utoipa::openapi::ComponentsBuilder {
         let id = <Self as TypeNameRaw>::type_name_raw();
         builder
-            .schema(format!("{id}Response"), <Res as utoipa::ToSchema>::schema())
-            .schemas_from_iter(<Res as utoipa::ToSchema>::aliases())
-            .schema(format!("{id}Error"), <Err as utoipa::ToSchema>::schema())
-            .schemas_from_iter(<Err as utoipa::ToSchema>::aliases())
+            .schema(
+                format!("{id}Response"),
+                <Self::Response as utoipa::ToSchema>::schema(),
+            )
+            .schemas_from_iter(<Self::Response as utoipa::ToSchema>::aliases())
+            .schema(
+                format!("{id}Error"),
+                <Self::Error as utoipa::ToSchema>::schema(),
+            )
+            .schemas_from_iter(<Self::Error as utoipa::ToSchema>::aliases())
     }
 }
 
@@ -346,13 +346,12 @@ pub struct EndpointWrapper<T> {
     inner: T,
 }
 
-impl<T, Req, Res, Err> EndpointWrapper<T>
+impl<T> EndpointWrapper<T>
 where
-    T: Endpoint<Request = Req, Response = Res, Error = Err> + Clone + Send + Sized + 'static,
-    Req: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static,
-    Res: serde::Serialize + Send + Sized + 'static,
-    Err: Send + Sized + 'static,
-    for<'a> &'a Err: Into<StatusCode>,
+    T: HttpEndpoint + Clone + Send + Sized + 'static,
+    T::Response: serde::Serialize,
+    T::Error: serde::Serialize,
+    for<'a> &'a T::Error: Into<StatusCode>,
 {
     pub fn new(inner: T) -> Self {
         Self { inner }
@@ -370,13 +369,12 @@ where
     }
 }
 
-impl<T, Req, Res, Err> axum::handler::Handler<Req> for EndpointWrapper<T>
+impl<T> axum::handler::Handler<T::Request> for EndpointWrapper<T>
 where
-    T: Endpoint<Request = Req, Response = Res, Error = Err> + Clone + Send + Sized + 'static,
-    Req: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static,
-    Res: serde::Serialize + Send + Sized + 'static,
-    Err: serde::Serialize + Send + Sized + 'static,
-    for<'a> &'a Err: Into<StatusCode>,
+    T: HttpEndpoint + Clone,
+    T::Response: serde::Serialize,
+    T::Error: serde::Serialize,
+    for<'a> &'a T::Error: Into<StatusCode>,
 {
     type Future = std::pin::Pin<Box<dyn Future<Output = axum::response::Response> + Send>>;
 
@@ -385,19 +383,43 @@ where
     }
 }
 
-impl<T, Req, Res, Err> utoipa::Path for EndpointWrapper<T>
+impl<T> From<EndpointWrapper<T>> for axum::Router
 where
-    T: Endpoint<Request = Req, Response = Res, Error = Err> + DocumentedEndpoint<Req, Res, Err>,
-    Req: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static,
-    Res: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
-    Err: utoipa::ToSchema + serde::Serialize + Send + Sized + 'static,
-    for<'a> &'a Err: Into<StatusCode>,
+    T: HttpEndpoint + Clone,
+    T::Response: serde::Serialize,
+    T::Error: serde::Serialize,
+    for<'a> &'a T::Error: Into<StatusCode>,
+{
+    fn from(wrapper: EndpointWrapper<T>) -> Self {
+        use utoipa::openapi::PathItemType;
+        let method = match T::METHOD {
+            PathItemType::Get => axum::routing::get(wrapper),
+            PathItemType::Post => axum::routing::post(wrapper),
+            PathItemType::Put => axum::routing::put(wrapper),
+            PathItemType::Delete => axum::routing::delete(wrapper),
+            PathItemType::Options => axum::routing::options(wrapper),
+            PathItemType::Head => axum::routing::head(wrapper),
+            PathItemType::Patch => axum::routing::patch(wrapper),
+            PathItemType::Trace => axum::routing::trace(wrapper),
+            PathItemType::Connect => todo!(),
+        };
+        axum::Router::new().route(T::PATH, method)
+    }
+}
+
+impl<T> utoipa::Path for EndpointWrapper<T>
+where
+    T: DocumentedEndpoint,
+    T::Request: axum::extract::FromRequest<axum::body::Body>,
+    T::Response: utoipa::ToSchema + serde::Serialize,
+    T::Error: utoipa::ToSchema + serde::Serialize,
+    for<'a> &'a T::Error: Into<StatusCode>,
 {
     fn path() -> &'static str {
-        <T as Endpoint>::PATH
+        <T as HttpEndpoint>::PATH
     }
 
     fn path_item(_: Option<&str>) -> utoipa::openapi::path::PathItem {
-        <T as DocumentedEndpoint<Req, Res, Err>>::path_item()
+        <T as DocumentedEndpoint>::path_item()
     }
 }

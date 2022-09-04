@@ -1,6 +1,6 @@
 use deps::*;
 
-use crate::{DocumentedEndpoint, Endpoint};
+use crate::{DocumentedEndpoint, HttpEndpoint, EndpointWrapper};
 
 #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
@@ -29,7 +29,7 @@ pub const TAG: crate::Tag = crate::Tag {
 mod get;
 
 pub fn router() -> axum::Router {
-    axum::Router::new().merge(get::GetUser.route())
+    axum::Router::new().merge(EndpointWrapper::new(get::GetUser))
 }
 
 pub fn components(
