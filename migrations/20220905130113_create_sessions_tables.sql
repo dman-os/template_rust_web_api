@@ -1,7 +1,7 @@
 CREATE TABLE __sessions_core (
     token             TEXT            NOT NULL,
     user_id           UUID            NOT NULL,
-    expiration_time   TIMESTAMPTZ     NOT NULL
+    expires_at   TIMESTAMPTZ     NOT NULL
 ) INHERITS (__common);
 
 CREATE TABLE sessions (

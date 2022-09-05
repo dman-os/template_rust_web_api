@@ -115,6 +115,51 @@ pub trait Endpoint: Send + Sync + 'static {
     ) -> Result<Self::Response, Self::Error>;
 }
 
+#[async_trait::async_trait]
+pub trait AuthenticatedEndpoint: Send + Sync + 'static {
+    type Request: Send + Sync + 'static;
+    type Response;
+    type Error: From<auth::authorize::Error>;
+
+    fn authorize_request(&self, request: &Self::Request) -> crate::auth::authorize::Request;
+
+    async fn handle(
+        &self,
+        ctx: &crate::Context,
+        accessing_user: uuid::Uuid,
+        request: Self::Request,
+    ) -> Result<Self::Response, Self::Error>;
+}
+
+// pub enum AuthenticatedEndpointError<E> {
+//     AuthenticationError(E),
+//     EndpointError(E)
+// }
+
+#[async_trait::async_trait]
+impl<T> Endpoint for T
+where
+    T: AuthenticatedEndpoint,
+{
+    type Request = T::Request;
+    type Response = T::Response;
+    type Error = T::Error;
+
+    async fn handle(
+        &self,
+        ctx: &crate::Context,
+        request: Self::Request,
+    ) -> Result<Self::Response, Self::Error> {
+        let accessing_user = {
+            let auth_args = self.authorize_request(&request);
+            crate::auth::authorize::Authorize
+                .handle(ctx, auth_args)
+                .await?
+        };
+        self.handle(ctx, accessing_user, request).await
+    }
+}
+
 pub trait HttpEndpoint: Endpoint + Clone
 where
     Self::Response: serde::Serialize,
@@ -435,5 +480,36 @@ where
 
     fn path_item(_: Option<&str>) -> utoipa::openapi::path::PathItem {
         <T as DocumentedEndpoint>::path_item()
+    }
+}
+
+pub struct BearerToken(pub std::sync::Arc<str>);
+
+#[async_trait::async_trait]
+impl<B> axum::extract::FromRequest<B> for BearerToken
+where
+    B: Send,
+{
+    type Rejection = axum::response::Response;
+
+    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+        let header = req
+            .headers()
+            .get(axum::http::header::AUTHORIZATION)
+            .ok_or_else(|| {
+                (StatusCode::UNAUTHORIZED, "Authorization header not set").into_response()
+            })?;
+        if &header.as_bytes()[0..7] != b"Bearer " {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Authorization header is not Bearer token",
+            )
+                .into_response());
+        }
+        let token = &header.as_bytes()[7..];
+        let token = std::str::from_utf8(token).map_err(|_| {
+            (StatusCode::UNAUTHORIZED, "Bearer token not valid utf-8").into_response()
+        })?;
+        Ok(Self(std::sync::Arc::from(token)))
     }
 }

@@ -9,6 +9,12 @@ use super::User;
 #[derive(Clone, Copy, Debug)]
 pub struct GetUser;
 
+#[derive(Debug)]
+pub struct Request {
+    token: std::sync::Arc<str>,
+    id: uuid::Uuid,
+}
+
 #[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", tag = "error", rename_all = "camelCase")]
 pub enum Error {
@@ -20,18 +26,39 @@ pub enum Error {
     Internal { message: String },
 }
 
+impl From<auth::authorize::Error> for Error {
+    fn from(err: auth::authorize::Error) -> Self {
+        use auth::authorize::Error;
+        match err {
+            Error::Unauthorized | Error::InvalidToken => Self::AccessDenied,
+            Error::Internal { message } => Self::Internal { message },
+        }
+    }
+}
+
 #[async_trait::async_trait]
-impl crate::Endpoint for GetUser {
-    type Request = uuid::Uuid;
+impl crate::AuthenticatedEndpoint for GetUser {
+    type Request = Request;
     type Response = User;
     type Error = Error;
+
+    fn authorize_request(&self, request: &Self::Request) -> crate::auth::authorize::Request {
+        crate::auth::authorize::Request {
+            token: request.token.clone(),
+            resource: crate::auth::Resource::User { id: request.id },
+            action: crate::auth::Action::Read,
+        }
+    }
 
     #[tracing::instrument(skip(ctx))]
     async fn handle(
         &self,
         ctx: &crate::Context,
-        id: Self::Request,
+        _accessing_user: uuid::Uuid,
+        request: Self::Request,
     ) -> Result<Self::Response, Self::Error> {
+        let id = request.id;
+
         sqlx::query_as!(
             User,
             r#"
@@ -73,10 +100,12 @@ impl HttpEndpoint for GetUser {
     const METHOD: Method = Method::Get;
     const PATH: &'static str = "/users/:id";
 
-    type Parameters = (Path<uuid::Uuid>,);
+    type Parameters = (BearerToken, Path<uuid::Uuid>);
 
-    fn request((Path(id),): Self::Parameters) -> Result<Self::Request, Self::Error> {
-        Ok(id)
+    fn request(
+        (BearerToken(token), Path(id)): Self::Parameters,
+    ) -> Result<Self::Request, Self::Error> {
+        Ok(self::Request { token, id })
     }
 }
 
@@ -124,6 +153,7 @@ mod tests {
 
     use crate::user::testing::*;
     use crate::utils::testing::*;
+    use crate::{auth::*, Endpoint};
 
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
@@ -134,10 +164,24 @@ mod tests {
         {
             let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
 
+            let token = authenticate::Authenticate
+                .handle(
+                    &ctx.ctx(),
+                    authenticate::Request {
+                        username: Some(USER_01_USERNAME.into()),
+                        email: None,
+                        password: "password".into(),
+                    },
+                )
+                .await
+                .unwrap_or_log()
+                .token;
+
             let resp = app
                 .oneshot(
                     Request::builder()
                         .uri(format!("/users/{USER_01_ID}"))
+                        .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                         .body(Default::default())
                         .unwrap_or_log(),
                 )

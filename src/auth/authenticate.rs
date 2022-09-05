@@ -23,7 +23,7 @@ pub struct Response {
     pub token: String,
     #[schema(example = 1234567)]
     #[serde(with = "time::serde::timestamp")]
-    pub expiration_time: time::OffsetDateTime,
+    pub expires_at: time::OffsetDateTime,
 }
 
 #[derive(Debug, Serialize, thiserror::Error, utoipa::ToSchema)]
@@ -81,12 +81,12 @@ WHERE user_id = (
         }
 
         let user_id = result.user_id;
-        let expiration_time =
+        let expires_at =
             time::OffsetDateTime::now_utc().saturating_add(ctx.config.auth_token_lifetime);
         let token = uuid::Uuid::new_v4().to_string();
         sqlx::query!(
             r#"
-INSERT INTO sessions (token, user_id, expiration_time)
+INSERT INTO sessions (token, user_id, expires_at)
 VALUES (
     $1,
     $2,
@@ -95,7 +95,7 @@ VALUES (
         "#,
             &token,
             &user_id,
-            &expiration_time
+            &expires_at
         )
         .execute(&ctx.db_pool)
         .await
@@ -105,7 +105,7 @@ VALUES (
 
         Ok(Response {
             user_id,
-            expiration_time,
+            expires_at,
             token,
         })
     }
@@ -132,7 +132,7 @@ impl DocumentedEndpoint for Authenticate {
             Self::Response {
                 user_id: Default::default(),
                 token: "mcpqwen8y3489nc8y2pf".into(),
-                expiration_time: time::OffsetDateTime::now_utc(),
+                expires_at: time::OffsetDateTime::now_utc(),
             },
         )
     }
@@ -259,7 +259,7 @@ mod tests {
             let body = resp.into_body();
             let body = hyper::body::to_bytes(body).await.unwrap_or_log();
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_log();
-            assert!(body["expirationTime"].is_number());
+            assert!(body["expiresAt"].is_number());
             assert!(body["token"].is_string());
             assert_eq!(USER_01_ID, body["userId"].as_str().unwrap());
 
@@ -305,7 +305,7 @@ mod tests {
             let body = resp.into_body();
             let body = hyper::body::to_bytes(body).await.unwrap_or_log();
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_log();
-            assert!(body["expirationTime"].is_number());
+            assert!(body["expiresAt"].is_number());
             assert!(body["token"].is_string());
             assert_eq!(USER_01_ID, body["userId"].as_str().unwrap());
 

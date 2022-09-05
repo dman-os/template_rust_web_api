@@ -20,6 +20,13 @@ DO $body$
             le_user.id, 
             '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
         );
+        -- TODO
+        -- INTO INTO sessions (
+        --     token, user_id, expires_at
+        -- ) VALUES (
+        --     '9d827d5c-15bd-413c-9431-39ff96155d7b',
+        --     le_user.id,
+        -- );
     END;
 $body$ LANGUAGE PLpgSQL;
 

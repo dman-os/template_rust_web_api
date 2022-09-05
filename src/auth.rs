@@ -3,19 +3,28 @@ use deps::*;
 use crate::{DocumentedEndpoint, EndpointWrapper, HttpEndpoint};
 
 #[derive(Debug)]
+pub struct Session {
+    pub token: String,
+    pub user_id: uuid::Uuid,
+    pub expires_at: time::OffsetDateTime,
+    pub created_at: time::OffsetDateTime,
+    pub updated_at: time::OffsetDateTime,
+}
+
+#[derive(Debug, Clone)]
 pub enum Resource {
-    User,
+    User { id: uuid::Uuid },
     Users,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Action {
     Read,
     Write,
     Delete,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Role {
     SuperAdmin,
 }

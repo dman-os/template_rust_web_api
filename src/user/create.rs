@@ -38,9 +38,7 @@ pub enum Error {
 #[async_trait::async_trait]
 impl Endpoint for CreateUser {
     type Request = Request;
-
     type Response = super::User;
-
     type Error = Error;
 
     async fn handle(
@@ -195,6 +193,7 @@ mod tests {
 
     use crate::user::testing::*;
     use crate::utils::testing::*;
+    use crate::{Endpoint, auth::*};
 
     use axum::http;
     use tower::ServiceExt;
@@ -285,12 +284,22 @@ mod tests {
                 ("response", &body),
             );
 
+            let token = authenticate::Authenticate.handle(&ctx.ctx(), authenticate::Request{
+                username: Some(body_json["username"].as_str().unwrap().into()),
+                email: None,
+                password: body_json["password"].as_str().unwrap().into()
+            }).await.unwrap_or_log().token;
+
             let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
             let resp = app
                 .oneshot(
                     http::Request::builder()
                         .method("GET")
                         .uri(format!("/users/{}", body["id"].as_str().unwrap()))
+                        .header(
+                            axum::http::header::AUTHORIZATION,
+                            format!("Bearer {token}"),
+                        )
                         .body(Default::default())
                         .unwrap_or_log(),
                 )
