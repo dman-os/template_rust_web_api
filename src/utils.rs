@@ -76,7 +76,10 @@ pub mod testing {
         pub async fn new(test_name: &'static str) -> Self {
             setup_tracing_once();
 
-            let config = crate::Config {};
+            let config = crate::Config {
+                pass_salt_hash: b"sea brine".to_vec(),
+                argon2_conf: argon2::Config::default(),
+            };
 
             use sqlx::prelude::*;
             let opts = sqlx::postgres::PgConnectOptions::default()
@@ -231,6 +234,38 @@ pub mod testing {
                 }
             }
             (check, json) => assert_eq!(check, json, "{check_name} != {json_name}"),
+        }
+    }
+
+    pub trait JsonExt {
+        fn remove_keys_from_obj(self: Self, keys: &[&str]) -> Self;
+        fn destructure_into_self(self: Self, from: Self) -> Self;
+    }
+    impl JsonExt for serde_json::Value {
+        fn remove_keys_from_obj(self: Self, keys: &[&str]) -> Self {
+            match self {
+                serde_json::Value::Object(mut map) => {
+                    for key in keys {
+                        map.remove(*key);
+                    }
+                    serde_json::Value::Object(map)
+                }
+                json => panic!("provided json was not an object: {:?}", json),
+            }
+        }
+        fn destructure_into_self(self: Self, from: Self) -> Self {
+            match (self, from) {
+                (serde_json::Value::Object(mut first), serde_json::Value::Object(second)) => {
+                    for (key, value) in second.into_iter() {
+                        first.insert(key, value);
+                    }
+                    serde_json::Value::Object(first)
+                }
+                (first, second) => panic!(
+                    "provided jsons weren't objects: first {:?}, second: {:?}",
+                    first, second
+                ),
+            }
         }
     }
 }

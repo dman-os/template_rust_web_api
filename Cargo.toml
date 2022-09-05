@@ -19,6 +19,8 @@ default = ["dylink"]
 deps = { path = "crates/deps" }
 dylink = { path = "crates/dylink", optional = true }
 shadow-rs = "0.16.3"
+# the following contain macros that don't like being re-exported
+validator = { version = "0.16.0", features = ["derive"] }
 sqlx = { version = "0.6.1", features = [
         "postgres",
         "runtime-tokio-rustls",

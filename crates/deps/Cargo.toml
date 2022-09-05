@@ -50,7 +50,6 @@ tower = { version = "*", features = [] }
 tower-http = { version = "*", features = ["full"] }
 hyper = { version = "*", features = ["server", "tcp", "stream", "http1"] }
 
-validator = { version = "0.16.0", features = ["derive"] }
 utoipa = { version = "2", features = ["debug", "uuid", "time", "smallvec", "axum_extras"] }
 utoipa-swagger-ui = { version = "2", features = ["axum"] }
 uuid = { version = "1", features = ["v4", "fast-rng", "serde"] }

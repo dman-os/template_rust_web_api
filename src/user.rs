@@ -1,6 +1,6 @@
 use deps::*;
 
-use crate::{DocumentedEndpoint, HttpEndpoint, EndpointWrapper};
+use crate::{DocumentedEndpoint, EndpointWrapper, HttpEndpoint};
 
 #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
@@ -27,16 +27,19 @@ pub const TAG: crate::Tag = crate::Tag {
 };
 
 mod get;
+mod create;
 
 pub fn router() -> axum::Router {
-    axum::Router::new().merge(EndpointWrapper::new(get::GetUser))
+    axum::Router::new()
+        .merge(EndpointWrapper::new(get::GetUser))
+        .merge(EndpointWrapper::new(create::CreateUser))
 }
 
 pub fn components(
     builder: utoipa::openapi::ComponentsBuilder,
 ) -> utoipa::openapi::ComponentsBuilder {
     let builder = get::GetUser::components(builder);
-    builder
+    create::CreateUser::components(builder)
 }
 
 pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBuilder {

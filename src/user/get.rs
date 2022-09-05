@@ -24,7 +24,8 @@ impl crate::Endpoint for GetUser {
         sqlx::query_as!(
             User,
             r#"
-SELECT id,
+SELECT 
+    id,
     created_at,
     updated_at,
     email::TEXT as "email!",
@@ -52,8 +53,8 @@ impl HttpEndpoint for GetUser {
 
     type Parameters = (Path<uuid::Uuid>,);
 
-    fn request((Path(id),): Self::Parameters) -> Self::Request {
-        id
+    fn request((Path(id),): Self::Parameters) -> Result<Self::Request, Self::Error> {
+        Ok(id)
     }
 }
 
@@ -117,17 +118,6 @@ impl From<&Error> for axum::http::StatusCode {
         }
     }
 }
-
-// impl Into<axum::http::StatusCode> for &Error {
-//     fn into(self) -> axum::http::StatusCode {
-//         use Error::*;
-//         match self {
-//             NotFound { .. } => StatusCode::NOT_FOUND,
-//             AccessDenied => StatusCode::UNAUTHORIZED,
-//             Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

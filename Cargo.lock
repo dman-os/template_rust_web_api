@@ -569,7 +569,6 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
- "validator",
 ]
 
 [[package]]
@@ -2201,6 +2200,7 @@ dependencies = [
  "dylink",
  "shadow-rs",
  "sqlx",
+ "validator",
 ]
 
 [[package]]
