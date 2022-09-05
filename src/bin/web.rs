@@ -24,6 +24,7 @@ fn main() {
                     <ApiDoc as utoipa::OpenApi>::openapi(),
                 ))
                 .merge(user::router())
+                .merge(auth::router())
                 .layer(axum::Extension(ctx))
                 .layer(
                     tower_http::trace::TraceLayer::new_for_http()

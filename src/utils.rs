@@ -79,6 +79,7 @@ pub mod testing {
             let config = crate::Config {
                 pass_salt_hash: b"sea brine".to_vec(),
                 argon2_conf: argon2::Config::default(),
+                auth_token_lifetime: time::Duration::seconds_f64(60. * 60. * 24. * 30.),
             };
 
             use sqlx::prelude::*;

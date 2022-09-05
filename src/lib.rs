@@ -6,113 +6,10 @@ use dylink;
 
 use deps::*;
 
+pub mod auth;
 pub mod macros;
 pub mod user;
 pub mod utils;
-
-pub mod auth {
-
-    #[derive(Debug)]
-    pub enum Resource {
-        User,
-        Users,
-    }
-
-    #[derive(Debug)]
-    pub enum Action {
-        Read,
-        Write,
-        Delete,
-    }
-
-    #[derive(Debug)]
-    pub enum Role {
-        SuperAdmin,
-    }
-
-    pub mod check_policy {
-        //! Check if the auth policy allows the provded [`User`] is allowed
-        //! to perform the provided [`Action`] on the provided [`Resource`]
-        
-        use deps::*;
-
-        use crate::auth::{Action, Resource};
-        use crate::*;
-
-        #[derive(Clone, Copy, Debug)]
-        pub struct CheckPolicy;
-
-        #[async_trait::async_trait]
-        impl crate::Endpoint for CheckPolicy {
-            type Request = Request;
-            type Response = bool;
-            type Error = Error;
-
-            #[tracing::instrument(skip(ctx))]
-            async fn handle(
-                &self,
-                ctx: &crate::Context,
-                id: Self::Request,
-            ) -> Result<Self::Response, Self::Error> {
-                return todo!();
-//                 sqlx::query_as!(
-//                     User,
-//                     r#"
-// SELECT id,
-//     created_at,
-//     updated_at,
-//     email::TEXT as "email!",
-//     username::TEXT as "username!",
-//     pic_url
-// FROM users
-// WHERE id = $1::uuid
-//             "#,
-//                     &id
-//                 )
-//                 .fetch_one(&ctx.db_pool)
-//                 .await
-//                 .map_err(|err| match err {
-//                     sqlx::Error::RowNotFound => Error::NotFound { id },
-//                     _ => Error::Internal {
-//                         message: format!("{err}"),
-//                     },
-//                 })
-            }
-        }
-
-        #[derive(Debug)]
-        pub struct Request {
-            pub user_id: uuid::Uuid,
-            pub resource: Resource,
-            pub action: Action,
-        }
-
-        #[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
-        #[serde(crate = "serde", tag = "error", rename_all = "camelCase")]
-        pub enum Error {
-            #[error("internal server error: {message:?}")]
-            Internal { message: String },
-        }
-
-        #[cfg(test)]
-        mod tests {
-            use deps::*;
-
-            use crate::user::testing::*;
-            use crate::utils::testing::*;
-
-            use axum::http::{Request, StatusCode};
-            use tower::ServiceExt;
-
-            #[tokio::test]
-            async fn check_policy_works() {
-                let ctx = TestContext::new(crate::function!()).await;
-                {}
-                ctx.close().await;
-            }
-        }
-    }
-}
 
 use crate::utils::*;
 
@@ -145,6 +42,7 @@ pub fn setup_tracing() -> eyre::Result<()> {
 pub struct Config {
     pub pass_salt_hash: Vec<u8>,
     pub argon2_conf: argon2::Config<'static>,
+    pub auth_token_lifetime: time::Duration,
 }
 
 #[derive(Debug)]
@@ -169,7 +67,7 @@ impl utoipa::OpenApi for ApiDoc {
                         r#"{}
 
 Notes:
-- Time values are integers despite the `string($date-time)` note they get
+- Time values are integers despite the `string($date-time)` type shown here.
                         "#,
                         build::PKG_DESCRIPTION
                     )))
@@ -178,14 +76,20 @@ Notes:
             .paths({
                 let builder = utoipa::openapi::path::PathsBuilder::new();
                 let builder = user::paths(builder);
-                builder
+                let builder = auth::paths(builder);
+                builder.build()
             })
             .components(Some({
                 let builder = utoipa::openapi::ComponentsBuilder::new();
                 let builder = user::components(builder);
+                let builder = auth::components(builder);
                 builder.build()
             }))
-            .tags(Some([user::TAG.into(), DEFAULT_TAG.into()]))
+            .tags(Some([
+                auth::TAG.into(),
+                user::TAG.into(),
+                DEFAULT_TAG.into(),
+            ]))
             .build();
         if let Some(components) = openapi.components.as_mut() {
             use utoipa::openapi::security::*;
@@ -241,7 +145,9 @@ where
             };
             let req = match Self::request(req) {
                 Ok(val) => val,
-                Err(err) => return (Into::<StatusCode>::into(&err), response::Json(err)).into_response(),
+                Err(err) => {
+                    return (Into::<StatusCode>::into(&err), response::Json(err)).into_response()
+                }
             };
             let Extension(ctx) =
                 match Extension::<crate::SharedContext>::from_request(&mut req_parts).await {
@@ -258,7 +164,7 @@ where
 }
 
 /// (statuscode, description, example)
-pub type SuccessResponse<Res> = (StatusCode, &'static str, Res);
+pub type SuccessResponse<Res> = (&'static str, Res);
 /// (description, example)
 pub type ErrorResponse<Err> = (&'static str, Err);
 
@@ -319,13 +225,9 @@ where
     const DESCRIPTION: &'static str = "";
     const DEPRECATED: bool = false;
 
-    fn successs() -> Vec<SuccessResponse<Self::Response>> {
-        vec![]
-    }
+    fn successs() -> SuccessResponse<Self::Response>;
 
-    fn errors() -> Vec<ErrorResponse<Self::Error>> {
-        vec![]
-    }
+    fn errors() -> Vec<ErrorResponse<Self::Error>>;
 
     fn path_item() -> utoipa::openapi::PathItem {
         let id = <Self as TypeNameRaw>::type_name_raw();
@@ -369,9 +271,10 @@ where
                     )
                     .responses({
                         let mut builder = utoipa::openapi::ResponsesBuilder::new();
-                        for (code, desc, resp) in &Self::successs() {
+                        {
+                            let (desc, resp) = &Self::successs();
                             builder = builder.response(
-                                code.to_string(),
+                                Self::SUCCESS_CODE.to_string(),
                                 utoipa::openapi::ResponseBuilder::new()
                                     .description(*desc)
                                     .content(

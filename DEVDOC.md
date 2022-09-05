@@ -4,11 +4,16 @@ If you're in a team, just use your git host's features or something.
 
 ## To-do
 
-- [ ] Password reset
-- [ ] 2FA
-- [ ] SSO
 - [ ] Some policy when the API is unable to contact other services
   - [ ] Attempt to recreate connections?
+- [ ] Auth
+  - [ ] Redis session cache
+  - [ ] Expired token vacating cron job
+  - [ ] Email verification
+  - [ ] Password reset
+  - [ ] 2FA
+  - [ ] SSO
+- [ ] Logging
 
 ## design-doc
 

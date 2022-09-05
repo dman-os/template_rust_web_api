@@ -1,5 +1,5 @@
 CREATE TABLE __credentials_core (
-    user_id        UUID           NOT NULL   DEFAULT uuid_generate_v4(),
+    user_id        UUID           NOT NULL,
     pass_hash      TEXT           NOT NULL
 ) INHERITS (__common);
 

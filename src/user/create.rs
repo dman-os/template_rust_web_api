@@ -8,6 +8,33 @@ use validator::Validate;
 #[derive(Debug, Clone)]
 pub struct CreateUser;
 
+#[derive(Debug, Deserialize, Validate)]
+#[serde(crate = "serde", rename_all = "camelCase")]
+pub struct Request {
+    #[validate(length(min = 5))]
+    pub username: String,
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 8))]
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, thiserror::Error, utoipa::ToSchema)]
+#[serde(crate = "serde", rename_all = "camelCase", tag = "error")]
+pub enum Error {
+    #[error("username occupied: {username:?}")]
+    UsernameOccupied { username: String },
+    #[error("email occupied: {email:?}")]
+    EmailOccupied { email: String },
+    #[error("invalid input: {issues:?}")]
+    InvalidInput {
+        #[from]
+        issues: validator::ValidationErrors,
+    },
+    #[error("internal server error: {message:?}")]
+    Internal { message: String },
+}
+
 #[async_trait::async_trait]
 impl Endpoint for CreateUser {
     type Request = Request;
@@ -56,16 +83,28 @@ FROM create_user($1::TEXT::CITEXT, $2::TEXT::CITEXT, $3)
                         email: request.email,
                     },
                     _ => Error::Internal {
-                        message: format!("{err}"),
+                        message: format!("db error: {err}"),
                     },
                 }
             }
             _ => Error::Internal {
-                message: format!("{err}"),
+                message: format!("db error: {err}"),
             },
         })?;
         // TODO: email notification, account activation
         Ok(user)
+    }
+}
+
+impl From<&Error> for axum::http::StatusCode {
+    fn from(err: &Error) -> Self {
+        use Error::*;
+        match err {
+            UsernameOccupied { .. } | EmailOccupied { .. } | InvalidInput { .. } => {
+                Self::BAD_REQUEST
+            }
+            Internal { .. } => Self::INTERNAL_SERVER_ERROR,
+        }
     }
 }
 
@@ -86,10 +125,9 @@ impl DocumentedEndpoint for CreateUser {
 
     const SUMMARY: &'static str = "Create a new User resource.";
 
-    fn successs() -> Vec<SuccessResponse<Self::Response>> {
+    fn successs() -> SuccessResponse<Self::Response> {
         use crate::user::testing::*;
-        vec![(
-            StatusCode::CREATED,
+        (
             "Success creating a User object",
             Self::Response {
                 id: Default::default(),
@@ -99,7 +137,7 @@ impl DocumentedEndpoint for CreateUser {
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
             },
-        )]
+        )
     }
 
     fn errors() -> Vec<ErrorResponse<Self::Error>> {
@@ -118,6 +156,28 @@ impl DocumentedEndpoint for CreateUser {
                 },
             ),
             (
+                "Invalid input",
+                Error::InvalidInput {
+                    issues: {
+                        let mut issues = validator::ValidationErrors::new();
+                        issues.add(
+                            "email",
+                            validator::ValidationError {
+                                code: std::borrow::Cow::from("email"),
+                                message: None,
+                                params: [(
+                                    std::borrow::Cow::from("value"),
+                                    serde_json::json!("bad.email.com"),
+                                )]
+                                .into_iter()
+                                .collect(),
+                            },
+                        );
+                        issues
+                    },
+                },
+            ),
+            (
                 "Internal server error",
                 Error::Internal {
                     message: "internal server error".to_string(),
@@ -127,52 +187,13 @@ impl DocumentedEndpoint for CreateUser {
     }
 }
 
-#[derive(Debug, Deserialize, Validate)]
-#[serde(crate = "serde", rename_all = "camelCase")]
-pub struct Request {
-    #[validate(length(min = 5))]
-    pub username: String,
-    #[validate(email)]
-    pub email: String,
-    #[validate(length(min = 8))]
-    pub password: String,
-}
-
-#[derive(Debug, Serialize, thiserror::Error, utoipa::ToSchema)]
-#[serde(crate = "serde", rename_all = "camelCase", tag = "error")]
-pub enum Error {
-    #[error("username occupied: {username:?}")]
-    UsernameOccupied { username: String },
-    #[error("email occupied: {email:?}")]
-    EmailOccupied { email: String },
-    #[error("invalid input: {issues:?}")]
-    InvalidInput {
-        #[from]
-        issues: validator::ValidationErrors,
-    },
-    #[error("internal server error: {message:?}")]
-    Internal { message: String },
-}
-
-impl From<&Error> for axum::http::StatusCode {
-    fn from(err: &Error) -> Self {
-        use Error::*;
-        match err {
-            UsernameOccupied { .. } | EmailOccupied { .. } | InvalidInput { .. } => {
-                Self::BAD_REQUEST
-            }
-            Internal { .. } => Self::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use deps::*;
 
     use super::Request;
 
-    // use crate::user::testing::*;
+    use crate::user::testing::*;
     use crate::utils::testing::*;
 
     use axum::http;
@@ -246,7 +267,7 @@ mod tests {
                     http::Request::builder()
                         .method("POST")
                         .uri("/users")
-                        .header("Content-Type", "application/json")
+                        .header(axum::http::header::CONTENT_TYPE, "application/json")
                         .body(serde_json::to_vec(&body_json).unwrap().into())
                         .unwrap_or_log(),
                 )
@@ -286,5 +307,76 @@ mod tests {
         }
         ctx.close().await;
     }
-}
 
+    #[tokio::test]
+    async fn create_user_fails_if_username_occupied() {
+        let ctx = TestContext::new(crate::function!()).await;
+        {
+            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
+
+            let body_json = fixture_request_json()
+                .destructure_into_self(serde_json::json!({ "username": USER_01_USERNAME }));
+            let resp = app
+                .oneshot(
+                    http::Request::builder()
+                        .method("POST")
+                        .uri("/users")
+                        .header(axum::http::header::CONTENT_TYPE, "application/json")
+                        .body(serde_json::to_vec(&body_json).unwrap().into())
+                        .unwrap_or_log(),
+                )
+                .await
+                .unwrap_or_log();
+            assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
+            let body = resp.into_body();
+            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
+            let body = serde_json::from_slice(&body).unwrap_or_log();
+            check_json(
+                (
+                    "expected",
+                    &serde_json::json!({
+                        "error": "usernameOccupied"
+                    }),
+                ),
+                ("response", &body),
+            );
+        }
+        ctx.close().await;
+    }
+
+    #[tokio::test]
+    async fn create_user_fails_if_email_occupied() {
+        let ctx = TestContext::new(crate::function!()).await;
+        {
+            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
+
+            let body_json = fixture_request_json()
+                .destructure_into_self(serde_json::json!({ "email": USER_01_EMAIL }));
+            let resp = app
+                .oneshot(
+                    http::Request::builder()
+                        .method("POST")
+                        .uri("/users")
+                        .header(axum::http::header::CONTENT_TYPE, "application/json")
+                        .body(serde_json::to_vec(&body_json).unwrap().into())
+                        .unwrap_or_log(),
+                )
+                .await
+                .unwrap_or_log();
+            assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
+            let body = resp.into_body();
+            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
+            let body = serde_json::from_slice(&body).unwrap_or_log();
+            check_json(
+                (
+                    "expected",
+                    &serde_json::json!({
+                        "error": "emailOccupied"
+                    }),
+                ),
+                ("response", &body),
+            );
+        }
+        ctx.close().await;
+    }
+}

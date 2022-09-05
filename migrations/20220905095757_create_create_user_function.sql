@@ -1,5 +1,3 @@
--- Add migration script here
-
 CREATE FUNCTION create_user(
   username CITEXT,
   email CITEXT,

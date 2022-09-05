@@ -9,6 +9,17 @@ use super::User;
 #[derive(Clone, Copy, Debug)]
 pub struct GetUser;
 
+#[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
+#[serde(crate = "serde", tag = "error", rename_all = "camelCase")]
+pub enum Error {
+    #[error("not found at id: {id:?}")]
+    NotFound { id: uuid::Uuid },
+    #[error("acess denied")]
+    AccessDenied,
+    #[error("internal server error: {message:?}")]
+    Internal { message: String },
+}
+
 #[async_trait::async_trait]
 impl crate::Endpoint for GetUser {
     type Request = uuid::Uuid;
@@ -41,9 +52,20 @@ WHERE id = $1::uuid
         .map_err(|err| match err {
             sqlx::Error::RowNotFound => Error::NotFound { id },
             _ => Error::Internal {
-                message: format!("{err}"),
+                message: format!("db error: {err}"),
             },
         })
+    }
+}
+
+impl From<&Error> for axum::http::StatusCode {
+    fn from(err: &Error) -> Self {
+        use Error::*;
+        match err {
+            NotFound { .. } => Self::NOT_FOUND,
+            AccessDenied => Self::UNAUTHORIZED,
+            Internal { .. } => Self::INTERNAL_SERVER_ERROR,
+        }
     }
 }
 
@@ -62,10 +84,9 @@ impl DocumentedEndpoint for GetUser {
     const TAG: &'static crate::Tag = &super::TAG;
     const SUMMARY: &'static str = "Get the User at the given id";
 
-    fn successs() -> Vec<SuccessResponse<Self::Response>> {
+    fn successs() -> SuccessResponse<Self::Response> {
         use crate::user::testing::*;
-        vec![(
-            axum::http::StatusCode::OK,
+        (
             "Success getting User",
             Self::Response {
                 id: Default::default(),
@@ -75,7 +96,7 @@ impl DocumentedEndpoint for GetUser {
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
             },
-        )]
+        )
     }
 
     fn errors() -> Vec<ErrorResponse<Error>> {
@@ -94,28 +115,6 @@ impl DocumentedEndpoint for GetUser {
                 },
             ),
         ]
-    }
-}
-
-#[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
-#[serde(crate = "serde", tag = "error", rename_all = "camelCase")]
-pub enum Error {
-    #[error("not found at id: {id:?}")]
-    NotFound { id: uuid::Uuid },
-    #[error("acess denied")]
-    AccessDenied,
-    #[error("internal server error: {message:?}")]
-    Internal { message: String },
-}
-
-impl From<&Error> for axum::http::StatusCode {
-    fn from(err: &Error) -> Self {
-        use Error::*;
-        match err {
-            NotFound { .. } => Self::NOT_FOUND,
-            AccessDenied => Self::UNAUTHORIZED,
-            Internal { .. } => Self::INTERNAL_SERVER_ERROR,
-        }
     }
 }
 
