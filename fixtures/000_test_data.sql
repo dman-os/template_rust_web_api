@@ -21,12 +21,13 @@ DO $body$
             '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
         );
         -- TODO
-        -- INTO INTO sessions (
-        --     token, user_id, expires_at
-        -- ) VALUES (
-        --     '9d827d5c-15bd-413c-9431-39ff96155d7b',
-        --     le_user.id,
-        -- );
+        INSERT INTO sessions (
+            token, user_id, expires_at
+        ) VALUES (
+            '9d827d5c-15bd-413c-9431-39ff96155d7b',
+            le_user.id,
+            CURRENT_TIMESTAMP + interval '7 days'
+        );
     END;
 $body$ LANGUAGE PLpgSQL;
 
@@ -89,6 +90,13 @@ DO $body$
         ) VALUES ( 
             le_user.id, 
             '$argon2i$v=19$m=4096,t=3,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A'
+        );
+        INSERT INTO sessions (
+            token, user_id, expires_at
+        ) VALUES (
+            'ebd3b465-be17-4077-bc4a-add9f76b5028',
+            le_user.id,
+            CURRENT_TIMESTAMP + interval '7 days'
         );
     END;
 $body$ LANGUAGE PLpgSQL;

@@ -36,10 +36,12 @@ impl From<auth::authorize::Error> for Error {
     }
 }
 
+pub type Response = Ref<super::User>;
+
 #[async_trait::async_trait]
 impl crate::AuthenticatedEndpoint for GetUser {
     type Request = Request;
-    type Response = User;
+    type Response = Response;
     type Error = Error;
 
     fn authorize_request(&self, request: &Self::Request) -> crate::auth::authorize::Request {
@@ -76,6 +78,7 @@ WHERE id = $1::uuid
         )
         .fetch_one(&ctx.db_pool)
         .await
+        .map(|val| val.into())
         .map_err(|err| match err {
             sqlx::Error::RowNotFound => Error::NotFound { id },
             _ => Error::Internal {
@@ -117,14 +120,14 @@ impl DocumentedEndpoint for GetUser {
         use crate::user::testing::*;
         (
             "Success getting User",
-            Self::Response {
+            User {
                 id: Default::default(),
                 created_at: time::OffsetDateTime::now_utc(),
                 updated_at: time::OffsetDateTime::now_utc(),
                 email: USER_01_EMAIL.into(),
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
-            },
+            }.into(),
         )
     }
 
@@ -152,57 +155,49 @@ mod tests {
     use deps::*;
 
     use crate::user::testing::*;
-    use crate::utils::testing::*;
-    use crate::{auth::*, Endpoint};
+    use crate::auth::testing::*;
 
-    use axum::http::{Request, StatusCode};
-    use tower::ServiceExt;
+    use axum::http::StatusCode;
 
-    #[tokio::test]
-    async fn get_user_works() {
-        let ctx = TestContext::new(crate::function!()).await;
-        {
-            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
+    macro_rules! get_user_integ {
+        ($(
+            $name:ident: {
+                uri: $uri:expr,
+                auth_token: $auth_token:expr,
+                status: $status:expr,
+                $(check_json: $check_json:expr,)?
+                $(extra_assertions: $extra_fn:expr,)?
+            },
+        )*) => {
+            mod integ {
+                use super::*;
+                crate::integration_table_tests! {
+                    $(
+                        $name: {
+                            uri: $uri,
+                            method: "GET",
+                            status: $status,
+                            router: crate::user::router(),
+                            $(check_json: $check_json,)?
+                            auth_token: $auth_token,
+                            $(extra_assertions: $extra_fn,)?
+                        },
+                    )*
+                }
+            }
+        };
+    }
 
-            let token = authenticate::Authenticate
-                .handle(
-                    &ctx.ctx(),
-                    authenticate::Request {
-                        username: Some(USER_01_USERNAME.into()),
-                        email: None,
-                        password: "password".into(),
-                    },
-                )
-                .await
-                .unwrap_or_log()
-                .token;
-
-            let resp = app
-                .oneshot(
-                    Request::builder()
-                        .uri(format!("/users/{USER_01_ID}"))
-                        .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
-                        .body(Default::default())
-                        .unwrap_or_log(),
-                )
-                .await
-                .unwrap_or_log();
-            assert_eq!(resp.status(), StatusCode::OK);
-            let body = resp.into_body();
-            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-            let body = serde_json::from_slice(&body).unwrap_or_log();
-            check_json(
-                (
-                    "expected",
-                    &serde_json::json!({
-                        "id": USER_01_ID,
-                        "username": USER_01_USERNAME,
-                        "email": USER_01_EMAIL,
-                    }),
-                ),
-                ("response", &body),
-            );
-        }
-        ctx.close().await;
+    get_user_integ! {
+        works: {
+            uri: format!("/users/{USER_01_ID}"),
+            auth_token: USER_01_SESSION.into(),
+            status: StatusCode::OK,
+            check_json: serde_json::json!({
+                "id": USER_01_ID,
+                "username": USER_01_USERNAME,
+                "email": USER_01_EMAIL,
+            }),
+        },
     }
 }

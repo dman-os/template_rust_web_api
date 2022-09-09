@@ -1,4 +1,3 @@
-// use deps::*;
 
 /* #[derive(serde::Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
@@ -13,6 +12,10 @@ impl<T> ErrorResponse<T> {
         Self { code, err }
     }
 } */
+
+pub use validation_errs::*;
+mod validation_errs;
+
 pub trait TypeNameRaw {
     fn type_name_raw() -> &'static str {
         let name = std::any::type_name::<Self>();
@@ -64,8 +67,21 @@ pub mod testing {
         Lazy::force(&TRACING);
     }
 
+    pub struct ExtraAssertionAgs<'a> {
+        pub ctx: &'a mut TestContext,
+        pub auth_token: Option<String>,
+        pub response_json: Option<serde_json::Value>,
+    }
+
+    pub type EAArgs<'a> = ExtraAssertionAgs<'a>;
+
+    /// BoxFuture type that's not send
+    pub type LocalBoxFuture<'a, T> = std::pin::Pin<Box<dyn futures::Future<Output = T> + 'a>>;
+
+    pub type ExtraAssertions<'c, 'f> = dyn Fn(ExtraAssertionAgs<'c>) -> LocalBoxFuture<'f, ()>;
+
     pub struct TestContext {
-        pub test_name: &'static str,
+        pub test_name: String,
         ctx: Option<SharedContext>,
         // clean_up_closure: Option<Box<dyn FnOnce(Context) -> ()>>,
         clean_up_closure:
@@ -75,11 +91,12 @@ pub mod testing {
     impl TestContext {
         pub async fn new(test_name: &'static str) -> Self {
             setup_tracing_once();
+            let test_name = test_name.replace("::tests::", "").replace("::", "_");
 
             let config = crate::Config {
                 pass_salt_hash: b"sea brine".to_vec(),
                 argon2_conf: argon2::Config::default(),
-                auth_token_lifetime: time::Duration::seconds_f64(60. * 60. * 24. * 30.),
+                auth_token_lifespan: time::Duration::seconds_f64(60. * 60. * 24. * 30.),
             };
 
             use sqlx::prelude::*;
@@ -123,7 +140,7 @@ pub mod testing {
                 .await
                 .expect("Failed to create database.");
 
-            let opts = opts.database(test_name);
+            let opts = opts.database(&test_name[..]);
 
             // migrate database
             let db_pool = sqlx::PgPool::connect_with(opts)
@@ -143,24 +160,8 @@ pub mod testing {
 
             let ctx = Context { db_pool, config };
             Self {
-                test_name,
+                test_name: test_name.clone(), // someone needs it downwind
                 ctx: Some(std::sync::Arc::new(ctx)),
-                /* clean_up_closure: Some(Box::new(move |ctx| {
-                    futures::executor::block_on(async move {
-                        ctx.db_pool.close().await;
-
-                        tracing::info!("got here: {}", ctx.db_pool.size());
-                        tokio::time::timeout(
-                            std::time::Duration::from_secs(1),
-                            connection
-                                .execute(&format!(r###"DROP DATABASE {test_name}"###)[..]),
-                        )
-                        .await
-                        .expect("Timeout when dropping test database.")
-                        .expect("Failed to drop test database.");
-                        tracing::info!("got here");
-                    })
-                })), */
                 clean_up_closure: Some(Box::new(move |ctx| {
                     Box::pin(async move {
                         ctx.db_pool.close().await;

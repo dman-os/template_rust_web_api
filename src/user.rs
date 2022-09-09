@@ -26,8 +26,8 @@ pub const TAG: crate::Tag = crate::Tag {
     desc: "Manipulate User objects.",
 };
 
-mod get;
 mod create;
+mod get;
 
 pub fn router() -> axum::Router {
     axum::Router::new()
@@ -39,14 +39,20 @@ pub fn components(
     builder: utoipa::openapi::ComponentsBuilder,
 ) -> utoipa::openapi::ComponentsBuilder {
     let builder = get::GetUser::components(builder);
-    create::CreateUser::components(builder)
+    let builder = create::CreateUser::components(builder);
+    builder.schema("User", <User as utoipa::ToSchema>::schema())
 }
 
 pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBuilder {
-    builder.path(
-        crate::axum_path_str_to_openapi(get::GetUser::PATH),
-        get::GetUser::path_item(),
-    )
+    builder
+        .path(
+            crate::axum_path_str_to_openapi(get::GetUser::PATH),
+            get::GetUser::path_item(),
+        )
+        .path(
+            crate::axum_path_str_to_openapi(create::CreateUser::PATH),
+            create::CreateUser::path_item(),
+        )
 }
 
 // #[cfg(test)]

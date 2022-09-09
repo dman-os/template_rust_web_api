@@ -25,3 +25,4 @@ If you're in a team, just use your git host's features or something.
 
 - [Postgres CITEXT support for SQLX](https://github.com/launchbadge/sqlx/issues/295)
 - [envFile support for codelldb](https://github.com/vadimcn/vscode-lldb/issues/506)
+- [$ref support for utoipa](https://github.com/juhaku/utoipa/issues/242)

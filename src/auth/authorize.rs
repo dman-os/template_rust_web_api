@@ -38,6 +38,8 @@ impl crate::Endpoint for Authorize {
         ctx: &crate::Context,
         request: Self::Request,
     ) -> Result<Self::Response, Self::Error> {
+        // TODO: roles support
+        // TODO: cache db access
         let session = sqlx::query_as!(
             super::Session,
             r#"

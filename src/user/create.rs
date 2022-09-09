@@ -1,5 +1,6 @@
 use deps::*;
 
+use crate::utils::*;
 use crate::*;
 
 use serde::{Deserialize, Serialize};
@@ -29,16 +30,18 @@ pub enum Error {
     #[error("invalid input: {issues:?}")]
     InvalidInput {
         #[from]
-        issues: validator::ValidationErrors,
+        issues: ValidationErrors,
     },
     #[error("internal server error: {message:?}")]
     Internal { message: String },
 }
 
+pub type Response = Ref<super::User>;
+
 #[async_trait::async_trait]
 impl Endpoint for CreateUser {
     type Request = Request;
-    type Response = super::User;
+    type Response = Response;
     type Error = Error;
 
     async fn handle(
@@ -46,7 +49,7 @@ impl Endpoint for CreateUser {
         ctx: &crate::Context,
         request: Self::Request,
     ) -> Result<Self::Response, Self::Error> {
-        validator::Validate::validate(&request)?;
+        validator::Validate::validate(&request).map_err(utils::ValidationErrors::from)?;
         let pass_hash = argon2::hash_encoded(
             request.password.as_bytes(),
             &ctx.config.pass_salt_hash,
@@ -90,7 +93,7 @@ FROM create_user($1::TEXT::CITEXT, $2::TEXT::CITEXT, $3)
             },
         })?;
         // TODO: email notification, account activation
-        Ok(user)
+        Ok(user.into())
     }
 }
 
@@ -127,14 +130,15 @@ impl DocumentedEndpoint for CreateUser {
         use crate::user::testing::*;
         (
             "Success creating a User object",
-            Self::Response {
+            super::User {
                 id: Default::default(),
                 created_at: time::OffsetDateTime::now_utc(),
                 updated_at: time::OffsetDateTime::now_utc(),
                 email: USER_01_EMAIL.into(),
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
-            },
+            }
+            .into(),
         )
     }
 
@@ -171,7 +175,7 @@ impl DocumentedEndpoint for CreateUser {
                                 .collect(),
                             },
                         );
-                        issues
+                        issues.into()
                     },
                 },
             ),
@@ -193,10 +197,9 @@ mod tests {
 
     use crate::user::testing::*;
     use crate::utils::testing::*;
-    use crate::{Endpoint, auth::*};
+    use crate::{auth::*, Endpoint};
 
     use axum::http;
-    use tower::ServiceExt;
 
     fn fixture_request() -> Request {
         serde_json::from_value(fixture_request_json()).unwrap()
@@ -254,138 +257,93 @@ mod tests {
         ),
     }
 
-    #[tokio::test]
-    async fn create_user_works() {
-        let ctx = TestContext::new(crate::function!()).await;
-        {
-            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
+    macro_rules! create_user_integ {
+        ($(
+            $name:ident: {
+                status: $status:expr,
+                body: $json_body:expr,
+                $(check_json: $check_json:expr,)?
+                $(extra_assertions: $extra_fn:expr,)?
+            },
+        )*) => {
+            mod integ {
+                use super::*;
+                crate::integration_table_tests! {
+                    $(
+                        $name: {
+                            uri: "/users",
+                            method: "POST",
+                            status: $status,
+                            router: crate::user::router(),
+                            body: $json_body,
+                            $(check_json: $check_json,)?
+                            $(extra_assertions: $extra_fn,)?
+                        },
+                    )*
+                }
+            }
+        };
+    }
 
-            let body_json = fixture_request_json();
-            let resp = app
-                .oneshot(
-                    http::Request::builder()
-                        .method("POST")
-                        .uri("/users")
-                        .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(serde_json::to_vec(&body_json).unwrap().into())
-                        .unwrap_or_log(),
-                )
-                .await
-                .unwrap_or_log();
-            assert_eq!(resp.status(), http::StatusCode::CREATED);
-            let body = resp.into_body();
-            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-            let body = serde_json::from_slice(&body).unwrap_or_log();
-            check_json(
-                (
-                    "expected",
-                    &body_json.clone().remove_keys_from_obj(&["password"]),
-                ),
-                ("response", &body),
-            );
+    create_user_integ! {
+        works: {
+            status: http::StatusCode::CREATED,
+            body: fixture_request_json(),
+            check_json: fixture_request_json().remove_keys_from_obj(&["password"]),
+            extra_assertions: &|EAArgs { ctx, response_json, .. }| {
+                Box::pin(async move {
+                    let req_body_json = fixture_request_json();
+                    let resp_body_json = response_json.unwrap();
+                    // TODO: use super user token
+                    let token = authenticate::Authenticate.handle(&ctx.ctx(), authenticate::Request{
+                        username: Some(req_body_json["username"].as_str().unwrap().into()),
+                        email: None,
+                        password: req_body_json["password"].as_str().unwrap().into()
+                    }).await.unwrap_or_log().token;
 
-            let token = authenticate::Authenticate.handle(&ctx.ctx(), authenticate::Request{
-                username: Some(body_json["username"].as_str().unwrap().into()),
-                email: None,
-                password: body_json["password"].as_str().unwrap().into()
-            }).await.unwrap_or_log().token;
-
-            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
-            let resp = app
-                .oneshot(
-                    http::Request::builder()
-                        .method("GET")
-                        .uri(format!("/users/{}", body["id"].as_str().unwrap()))
-                        .header(
-                            axum::http::header::AUTHORIZATION,
-                            format!("Bearer {token}"),
+                    let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
+                    let resp = app
+                        .oneshot(
+                            http::Request::builder()
+                                .method("GET")
+                                .uri(format!("/users/{}", resp_body_json["id"].as_str().unwrap()))
+                                .header(
+                                    axum::http::header::AUTHORIZATION,
+                                    format!("Bearer {token}"),
+                                )
+                                .body(Default::default())
+                                .unwrap_or_log(),
                         )
-                        .body(Default::default())
-                        .unwrap_or_log(),
-                )
-                .await
-                .unwrap_or_log();
-            assert_eq!(resp.status(), http::StatusCode::OK);
-            let body = resp.into_body();
-            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-            let body = serde_json::from_slice(&body).unwrap_or_log();
-            check_json(
-                ("expected", &body_json.remove_keys_from_obj(&["password"])),
-                ("response", &body),
-            );
-        }
-        ctx.close().await;
-    }
-
-    #[tokio::test]
-    async fn create_user_fails_if_username_occupied() {
-        let ctx = TestContext::new(crate::function!()).await;
-        {
-            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
-
-            let body_json = fixture_request_json()
-                .destructure_into_self(serde_json::json!({ "username": USER_01_USERNAME }));
-            let resp = app
-                .oneshot(
-                    http::Request::builder()
-                        .method("POST")
-                        .uri("/users")
-                        .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(serde_json::to_vec(&body_json).unwrap().into())
-                        .unwrap_or_log(),
-                )
-                .await
-                .unwrap_or_log();
-            assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
-            let body = resp.into_body();
-            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-            let body = serde_json::from_slice(&body).unwrap_or_log();
-            check_json(
-                (
-                    "expected",
-                    &serde_json::json!({
-                        "error": "usernameOccupied"
-                    }),
-                ),
-                ("response", &body),
-            );
-        }
-        ctx.close().await;
-    }
-
-    #[tokio::test]
-    async fn create_user_fails_if_email_occupied() {
-        let ctx = TestContext::new(crate::function!()).await;
-        {
-            let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
-
-            let body_json = fixture_request_json()
-                .destructure_into_self(serde_json::json!({ "email": USER_01_EMAIL }));
-            let resp = app
-                .oneshot(
-                    http::Request::builder()
-                        .method("POST")
-                        .uri("/users")
-                        .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(serde_json::to_vec(&body_json).unwrap().into())
-                        .unwrap_or_log(),
-                )
-                .await
-                .unwrap_or_log();
-            assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
-            let body = resp.into_body();
-            let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-            let body = serde_json::from_slice(&body).unwrap_or_log();
-            check_json(
-                (
-                    "expected",
-                    &serde_json::json!({
-                        "error": "emailOccupied"
-                    }),
-                ),
-                ("response", &body),
-            );
-        }
-        ctx.close().await;
+                        .await
+                        .unwrap_or_log();
+                    assert_eq!(resp.status(), http::StatusCode::OK);
+                    let body = resp.into_body();
+                    let body = hyper::body::to_bytes(body).await.unwrap_or_log();
+                    let body = serde_json::from_slice(&body).unwrap_or_log();
+                    check_json(
+                        ("expected", &req_body_json.remove_keys_from_obj(&["password"])),
+                        ("response", &body),
+                    );
+                })
+            },
+        },
+        fails_if_username_occupied: {
+            status: http::StatusCode::BAD_REQUEST,
+            body: fixture_request_json().destructure_into_self(
+                serde_json::json!({ "username": USER_01_USERNAME })
+            ),
+            check_json: serde_json::json!({
+                "error": "usernameOccupied"
+            }),
+        },
+        fails_if_email_occupied: {
+            status: http::StatusCode::BAD_REQUEST,
+            body: fixture_request_json().destructure_into_self(
+                serde_json::json!({ "email": USER_01_EMAIL })
+            ),
+            check_json: serde_json::json!({
+                "error": "emailOccupied"
+            }),
+        },
     }
 }

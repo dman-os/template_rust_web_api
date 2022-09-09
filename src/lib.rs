@@ -42,7 +42,7 @@ pub fn setup_tracing() -> eyre::Result<()> {
 pub struct Config {
     pub pass_salt_hash: Vec<u8>,
     pub argon2_conf: argon2::Config<'static>,
-    pub auth_token_lifetime: time::Duration,
+    pub auth_token_lifespan: time::Duration,
 }
 
 #[derive(Debug)]
@@ -81,6 +81,19 @@ Notes:
             })
             .components(Some({
                 let builder = utoipa::openapi::ComponentsBuilder::new();
+                let builder = builder
+                    .schema(
+                        "ValidationErrors",
+                        <utils::ValidationErrors as utoipa::ToSchema>::schema(),
+                    )
+                    .schema(
+                        "ValidationErrorsKind",
+                        <utils::ValidationErrorsKind as utoipa::ToSchema>::schema(),
+                    )
+                    .schema(
+                        "ValidationError",
+                        <utils::ValidationError as utoipa::ToSchema>::schema(),
+                    );
                 let builder = user::components(builder);
                 let builder = auth::components(builder);
                 builder.build()
@@ -259,10 +272,58 @@ fn test_axum_path_str_to_openapi() {
     }
 }
 
+pub trait ToRefOrSchema {
+    fn schema_name() -> &'static str;
+    fn ref_or_schema() -> utoipa::openapi::schema::RefOr<utoipa::openapi::schema::Schema>;
+}
+
+impl<T> ToRefOrSchema for T
+where
+    T: utoipa::ToSchema,
+{
+    fn ref_or_schema() -> utoipa::openapi::schema::RefOr<utoipa::openapi::schema::Schema> {
+        T::schema().into()
+    }
+
+    fn schema_name() -> &'static str {
+        T::type_name_raw()
+    }
+}
+
+#[derive(educe::Educe, serde::Serialize, serde::Deserialize)]
+#[serde(crate = "serde")]
+#[educe(Deref, DerefMut)]
+pub struct Ref<T>(T);
+
+impl<T> From<T> for Ref<T> {
+    fn from(inner: T) -> Self {
+        Self(inner)
+    }
+}
+
+impl<T> ToRefOrSchema for Ref<T>
+where
+    T: utoipa::ToSchema + serde::Serialize,
+{
+    fn ref_or_schema() -> utoipa::openapi::schema::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::schema::Ref::from_schema_name(T::type_name_raw()).into()
+        // utoipa::openapi::ObjectBuilder::new()
+        //     .property(
+        //         "$ref",
+        //         utoipa::openapi::schema::Ref::from_schema_name(T::type_name_raw()),
+        //     )
+        //     .into()
+    }
+
+    fn schema_name() -> &'static str {
+        T::schema_name()
+    }
+}
+
 pub trait DocumentedEndpoint: HttpEndpoint + Sized
 where
-    Self::Response: utoipa::ToSchema + serde::Serialize,
-    Self::Error: utoipa::ToSchema + serde::Serialize,
+    Self::Response: ToRefOrSchema + serde::Serialize,
+    Self::Error: ToRefOrSchema + serde::Serialize,
     for<'a> &'a Self::Error: Into<StatusCode>,
 {
     const TAG: &'static Tag = &DEFAULT_TAG;
@@ -324,12 +385,28 @@ where
                                     .description(*desc)
                                     .content(
                                         "application/json",
-                                        utoipa::openapi::ContentBuilder::new()
-                                            .schema(utoipa::openapi::Ref::from_schema_name(
-                                                format!("{id}Response"),
-                                            ))
-                                            .example(Some(serde_json::to_value(resp).unwrap()))
-                                            .build(),
+                                        {
+                                        match Self::Response::ref_or_schema() {
+                                        // if it's a `Ref`, use the `schema_name`
+                                            utoipa::openapi::schema::RefOr::Ref(_) => {
+                                            utoipa::openapi::ContentBuilder::new()
+                                                .schema(utoipa::openapi::Ref::from_schema_name(
+                                                        Self::Response::schema_name()
+                                                ))
+                                                .example(Some(serde_json::to_value(resp).unwrap()))
+                                                .build()
+                                            },
+                                            // else, assume generic name
+                                            utoipa::openapi::schema::RefOr::T(_) => {
+                                            utoipa::openapi::ContentBuilder::new()
+                                                .schema(utoipa::openapi::Ref::from_schema_name(
+                                                    format!("{id}Response"),
+                                                ))
+                                                .example(Some(serde_json::to_value(resp).unwrap()))
+                                                .build()
+                                            },
+                                        }
+                                        }
                                     )
                                     .build(),
                             );
@@ -360,17 +437,22 @@ where
         builder: utoipa::openapi::ComponentsBuilder,
     ) -> utoipa::openapi::ComponentsBuilder {
         let id = <Self as TypeNameRaw>::type_name_raw();
-        builder
-            .schema(
+        [
+            (
                 format!("{id}Response"),
-                <Self::Response as utoipa::ToSchema>::schema(),
-            )
-            .schemas_from_iter(<Self::Response as utoipa::ToSchema>::aliases())
-            .schema(
+                <Self::Response as ToRefOrSchema>::ref_or_schema(),
+            ),
+            (
                 format!("{id}Error"),
-                <Self::Error as utoipa::ToSchema>::schema(),
-            )
-            .schemas_from_iter(<Self::Error as utoipa::ToSchema>::aliases())
+                <Self::Error as ToRefOrSchema>::ref_or_schema(),
+            ),
+        ]
+        .into_iter()
+        .fold(builder, |builder, (name, ref_or)| match ref_or {
+            // assume the component has been added elsewhere
+            utoipa::openapi::schema::RefOr::Ref(_) => builder,
+            utoipa::openapi::schema::RefOr::T(schema) => builder.schema(name, schema),
+        })
     }
 }
 

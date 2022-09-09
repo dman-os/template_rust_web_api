@@ -82,7 +82,7 @@ WHERE user_id = (
 
         let user_id = result.user_id;
         let expires_at =
-            time::OffsetDateTime::now_utc().saturating_add(ctx.config.auth_token_lifetime);
+            time::OffsetDateTime::now_utc().saturating_add(ctx.config.auth_token_lifespan);
         let token = uuid::Uuid::new_v4().to_string();
         sqlx::query!(
             r#"

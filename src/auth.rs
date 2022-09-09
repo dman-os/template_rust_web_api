@@ -55,3 +55,8 @@ pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBu
         authenticate::Authenticate::path_item(),
     )
 }
+
+pub mod testing {
+    pub const USER_01_SESSION: &str = "9d827d5c-15bd-413c-9431-39ff96155d7b";
+    pub const USER_04_SESSION: &str = "ebd3b465-be17-4077-bc4a-add9f76b5028";
+}

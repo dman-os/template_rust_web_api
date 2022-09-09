@@ -26,11 +26,37 @@ macro_rules! function {
     }};
 }
 
+/// Resolves to function path
+#[macro_export]
+macro_rules! function_full {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        static FNAME: deps::once_cell::sync::Lazy<&'static str> =
+            deps::once_cell::sync::Lazy::new(|| {
+                let name = type_name_of(f);
+                // cut out the `::f`
+                let name = &name[..name.len() - 3];
+                // eleimante closure name
+                let name = name.trim_end_matches("::{{closure}}");
+
+                // // Find and cut the rest of the path
+                // let name = match &name.rfind(':') {
+                //     Some(pos) => &name[pos + 1..name.len()],
+                //     None => name,
+                // };
+                name
+            });
+        *FNAME
+    }};
+}
+
 #[test]
 fn test_function_macro() {
     assert_eq!("test_function_macro", function!())
 }
-
 
 /// Gives you a identifier that is equivalent to an escaped dollar_sign.
 /// Without this helper, nested using the dollar operator in nested macros would be impossible.
@@ -81,10 +107,10 @@ macro_rules! optional_expr {
 #[macro_export]
 macro_rules! optional_ident {
     () => {};
-    ($token1:expr) => {
+    ($token1:ident) => {
         $token1
     };
-    ($token1:expr, $($token2:expr,)+) => {
+    ($token1:ident, $($token2:ident,)+) => {
         $token1
     };
 }
@@ -213,6 +239,179 @@ macro_rules! table_tests {
     };
 }
 
+#[macro_export]
+macro_rules! integration_table_tests {
+    ($(
+        $name:ident: {
+            uri: $uri:expr,
+            method: $method:expr,
+            status: $status:expr,
+            router: $router:expr,
+            $(body: $json_body:expr,)?
+            $(check_json: $check_json:expr,)?
+            $(auth_token: $auth_token:expr,)?
+            $(extra_assertions: $extra_fn:expr,)?
+            $(print_response: $print_res:expr,)?
+        },
+    )*) => {
+        $(
+            #[allow(unused_variables)]
+            #[tokio::test]
+            async fn $name() {
+                let mut ctx = crate::utils::testing::TestContext::new(crate::function_full!()).await;
+                {
+                    let mut request = axum::http::Request::builder()
+                                        .method($method)
+                                        .uri($uri);
+
+                    // let token = authenticate::Authenticate
+                    //     .handle(
+                    //         &ctx.ctx(),
+                    //         authenticate::Request {
+                    //             username: Some(USER_01_USERNAME.into()),
+                    //             email: None,
+                    //             password: "password".into(),
+                    //         },
+                    //     )
+                    //     .await
+                    //     .unwrap_or_log()
+                    //     .token;
+                    let token: Option<String> = crate::optional_expr!($($auth_token)?);
+                    if let Some(token) = token.as_ref() {
+                        request = request
+                                .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"));
+                    }
+
+                    let json: Option<serde_json::Value> = crate::optional_expr!($($json_body)?);
+                    let request = if let Some(json_body) = json {
+                        request
+                            .header(axum::http::header::CONTENT_TYPE, "application/json")
+                            .body(serde_json::to_vec(&json_body).unwrap().into())
+                            .unwrap_or_log()
+                    } else {
+                        request
+                            .body(Default::default()).unwrap_or_log()
+                    };
+
+                    let app = $router.layer(axum::Extension(ctx.ctx()));
+                    use tower::ServiceExt;
+                    let res = app
+                        .oneshot(request)
+                        .await
+                        .unwrap_or_log();
+
+                    let status_code = $status;
+                    assert_eq!(res.status(), status_code, "response: {:?}", res);
+
+                    let check_json: Option<serde_json::Value> = crate::optional_expr!($($check_json)?);
+
+                    let (head, body) = res.into_parts();
+                    let response_json: Option<serde_json::Value> = hyper::body::to_bytes(body)
+                        .await
+                        .ok()
+                        .and_then(|body|
+                            serde_json::from_slice(&body).ok()
+                        );
+                    if let Some(check_json) = check_json {
+                        let response_json = response_json.as_ref().unwrap();
+                        crate::utils::testing::check_json(
+                            ("check", &check_json),
+                            ("response", &response_json)
+                        );
+                    }
+                    let print_response: Option<bool> = crate::optional_expr!($($print_res)?);
+                    if let Some(true) = print_response {
+                        tracing::info!(head = ?head, "reponse_json: {:#?}", response_json);
+                    }
+
+                    use crate::utils::testing::{ExtraAssertions, EAArgs};
+                    let extra_assertions: Option<&ExtraAssertions> = crate::optional_expr!($($extra_fn)?);
+                    if let Some(extra_assertions) = extra_assertions {
+                        extra_assertions(EAArgs{
+                            ctx: &mut ctx,
+                            auth_token: token,
+                            response_json
+                        }).await;
+                    }
+                }
+                ctx.close().await;
+            }
+        )*
+    }
+}
+
+// FIXME: 
+#[macro_export]
+macro_rules! integration_table_tests_shorthand {
+    (
+        $sname:ident,
+        $(uri: $suri:expr,)?
+        $(method: $smethod:expr,)?
+        $(status: $sstatus:expr,)?
+        $(router: $srouter:expr,)?
+        $(body: $sjson_body:expr,)?
+        $(check_json: $scheck_json:expr,)?
+        $(extra_assertions: $sextra_fn:expr,)?
+    ) => {
+        $crate::__with_dollar_sign! {
+            ($d:tt) => {
+                macro_rules! $sname {
+                    ($d (
+                        $d name:ident: {
+                            $d (uri: $d uri:expr,)?
+                            $d (method: $d method:expr,)?
+                            $d (status: $d status:expr,)?
+                            $d (router: $d router:expr,)?
+                            $d (body: $d json_body:expr,)?
+                            $d (check_json: $d check_json:expr,)?
+                            $d (extra_assertions: $d extra_fn:expr,)?
+                        },
+                    )*) => {
+                        mod $sname {
+                            #![ allow( unused_imports ) ]
+                            use super::*;
+                            crate::integration_table_tests!{
+                                $d(
+                                    $d name: {
+                                        optional_ident!(
+                                            $(uri: $suri,)?
+                                            $d(uri: $d uri,)?
+                                        );
+                                        optional_token!(
+                                            $(method: $smethod,)?
+                                            $d(check_json: $d method,)?
+                                        );
+                                        optional_token!(
+                                            $(status: $sstatus,)?
+                                            $d(check_json: $d status,)?
+                                        );
+                                        optional_token!(
+                                            $(router: $srouter,)?
+                                            $d(router: $d router,)?
+                                        );
+                                        optional_token!(
+                                            $(body: $sjson_body,)?
+                                            $d(body: $d json_body,)?
+                                        );
+                                        optional_token!(
+                                            $(check_json: $scheck_json,)?
+                                            $d(check_json: $d check_json,)?
+                                        );
+                                        optional_token!(
+                                            $(extra_assertions: $sextra_fn,)?
+                                            $d(extra_assertions: $d extra_fn,)?
+                                        );
+                                    },
+                                )*
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -274,201 +473,82 @@ mod tests {
             1, 2, 3
         ),
     }
-}
 
-// #[macro_export]
-// macro_rules! integration_table_tests {
-//     ($(
-//         $name:ident: {
-//             uri: $uri:expr,
-//             method: $method:ident,
-//             status: $status:expr,
-//             router: $router:expr,
-//             $(body: $json_body:expr,)?
-//             $(check_json: $check_json:expr,)?
-//             $(auth_user: $auth_user:expr,)?
-//             $(extra_assertions: $extra_fn:expr,)?
-//             $(print_response: $print_res:expr,)?
-//         },
-//     )*) => {
-//         $(
-//             #[allow(unused_variables)]
-//             #[tokio::test]
-//             async fn $name() {
-//                 let ctx = TestContext::new(crate::function!()).await;
-//                 {
-//                     let app = $router.layer(axum::Extension(ctx.ctx()));
-//
-//                     let uri = $uri;
-//                     let json: Option<serde_json::Value> = crate::optional_expr!($($json_body)?);
-//
-//                     let resp = app
-//                         .oneshot(
-//                             Request::builder()
-//                                 .method($method)
-//                                 .uri($uri)
-//                                 .body(Default::default())
-//                                 .unwrap_or_log(),
-//                         )
-//                         .await
-//                         .unwrap_or_log();
-//                     assert_eq!(resp.status(), StatusCode::OK);
-//                     let body = resp.into_body();
-//                     let body = hyper::body::to_bytes(body).await.unwrap_or_log();
-//                     let body = serde_json::from_slice(&body).unwrap_or_log();
-//                     check_json(
-//                         (
-//                             "expected",
-//                             &serde_json::json!({
-//                                 "id": USER_01_ID,
-//                                 "username": USER_01_USERNAME,
-//                                 "email": USER_01_EMAIL,
-//                             }),
-//                         ),
-//                         ("response", &body),
-//                     );
-//                 }
-//                 ctx.close().await;
-//
-//                 let (mut ctx, srv, clean_up) =
-//                     crate::utils::testing::TestContext::new_with_service(crate::function!(), $configure_fn).await;
-//
-//                 let path = $path;
-//
-//                 let json: Option<serde_json::Value> = crate::optional_expr!($($json_body)?);
-//
-//
-//                 let token: Option<String> = crate::optional_expr!($($auth_user)?)
-//                     .map(|user_id: &'static str| generate_valid_token_default(
-//                             user_id.parse().unwrap(),
-//                             ctx.ctx.as_ref().unwrap(),
-//                         )
-//                         .unwrap()
-//                     );
-//
-//                 let mut res = crate::__send_req!(srv, $method, path, json, token, $($json_body)?);
-//
-//                 let status_code = $status;
-//                 assert_eq!(res.status(), status_code, "response: {:?}", res);
-//
-//                 let check_json: Option<serde_json::Value> = crate::optional_expr!($($check_json)?);
-//
-//                 let response_json: Option<serde_json::Value> = res.json().await.ok();
-//                 if let Some(check_json) = check_json {
-//                     let response_json = response_json.as_ref().unwrap();
-//                     crate::utils::testing::check_json(("check", &check_json), ("response", &response_json));
-//                 }
-//                 let print_response: Option<bool> = crate::optional_expr!($($print_res)?);
-//                 if let Some(true) = print_response{
-//                     tracing::info!(response = ?res, "reponse_json: {:#?}",response_json);
-//                 }
-//
-//                 use crate::utils::testing::{ExtraAssertions, EAArgs};
-//                 let extra_assertions: Option<&ExtraAssertions> = crate::optional_expr!($($extra_fn)?);
-//                 if let Some(extra_assertions) = extra_assertions {
-//                     extra_assertions(EAArgs{
-//                         ctx: &mut ctx,
-//                         srv: &srv,
-//                         auth_token: token,
-//                         response_json
-//                     }).await;
-//                 }
-//
-//                 clean_up(ctx).await;
-//             }
-//         )*
-//     }
-// }
-//
-// #[macro_export]
-// macro_rules! integration_table_tests_shorthand{
-//     (
-//         $sname:ident,
-//         $(path: $spath:expr,)?
-//         $(method: $smethod:ident,)?
-//         $(status: $sstatus:expr,)?
-//         $(configure_fn: $sconfigure_fn:expr,)?
-//         $(body: $sjson_body:expr,)?
-//         $(check_json: $scheck_json:expr,)?
-//         $(extra_assertions: $sextra_fn:expr,)?
-//     ) => {
-//         $crate::__with_dollar_sign! {
-//             ($d:tt) => {
-//                 macro_rules! $sname{
-//                     ($d (
-//                         $d name:ident: {
-//                             $d (path: $d path:expr,)?
-//                             $d (method: $d method:ident,)?
-//                             $d (status: $d status:expr,)?
-//                             $d (configure_fn: $d configure_fn:expr,)?
-//                             $d (body: $d json_body:expr,)?
-//                             $d (check_json: $d check_json:expr,)?
-//                             $d (extra_assertions: $d extra_fn:expr,)?
-//                         },
-//                     )*) =>{
-//                         crate::integration_table_tests!{
-//                             $d(
-//                                 $d name: {
-//                                     optional_ident!(
-//                                         $(path: $spath,)?
-//                                         $d(path: $d path,)?
-//                                     );
-//                                     optional_token!(
-//                                         $(method: $smethod,)?
-//                                         $d(check_json: $d method,)?
-//                                     );
-//                                     optional_token!(
-//                                         $(status: $sstatus,)?
-//                                         $d(check_json: $d status,)?
-//                                     );
-//                                     optional_token!(
-//                                         $(configure_fn: $sconfigure_fn,)?
-//                                         $d(configure_fn: $d configure_fn,)?
-//                                     );
-//                                     optional_token!(
-//                                         $(body: $sjson_body,)?
-//                                         $d(body: $d json_body,)?
-//                                     );
-//                                     optional_token!(
-//                                         $(check_json: $scheck_json,)?
-//                                         $d(check_json: $d check_json,)?
-//                                     );
-//                                     optional_token!(
-//                                         $(extra_assertions: $sextra_fn,)?
-//                                         $d(extra_assertions: $d extra_fn,)?
-//                                     );
-//                                 },
-//                             )*
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
-//
-// #[macro_export]
-// macro_rules! __send_req {
-//     // without payload
-//     ($srv:ident, $method:ident, $path:expr, $json:ident, $token:ident,) => {{
-//         let mut req = $srv.$method($path);
-//         if let Some(token) = $token.as_ref() {
-//             req = req.append_header((
-//                 actix_web::http::header::AUTHORIZATION,
-//                 format!("Bearer {}", token),
-//             ));
-//         }
-//         req.send().await.unwrap()
-//     }};
-//     // with payload
-//     ($srv:ident, $method:ident, $path:expr, $json:ident, $token:ident, $_json_expr:expr) => {{
-//         let mut req = $srv.$method($path);
-//         if let Some(token) = $token.as_ref() {
-//             req = req.append_header((
-//                 actix_web::http::header::AUTHORIZATION,
-//                 format!("Bearer {}", token),
-//             ));
-//         }
-//         req.send_json(&$json.unwrap()).await.unwrap()
-//     }};
-// }
+    use deps::*;
+    fn sum_router() -> axum::Router {
+        #[derive(serde::Deserialize)]
+        #[serde(crate = "serde")]
+        struct Args {
+            a: u32,
+            b: u32,
+        }
+        use axum::Json;
+        axum::Router::new().route(
+            "/sum",
+            axum::routing::post(
+                |Json(args): Json<Args>| async move { Json(serde_json::json!({ "c": (args.a + args.b) })) },
+            ),
+        )
+    }
+
+    macro_rules! integ_table_test_sum {
+        ($(
+            $name:ident: {
+                status: $status:expr,
+                body: $json_body:expr,
+                $(check_json: $check_json:expr,)?
+                $(extra_assertions: $extra_fn:expr,)?
+            },
+        )*) => {
+            mod integ_table_test_sum {
+                use super::*;
+                crate::integration_table_tests! {
+                    $(
+                        $name: {
+                            uri: "/sum",
+                            method: "POST",
+                            status: $status,
+                            router: sum_router(),
+                            body: $json_body,
+                            $(check_json: $check_json,)?
+                            $(extra_assertions: $extra_fn,)?
+                        },
+                    )*
+                }
+            }
+        };
+    }
+
+    integ_table_test_sum! {
+        succeeds: {
+            status: axum::http::StatusCode::OK,
+            body: serde_json::json!({ "a": 1, "b": 2 }),
+            check_json: serde_json::json!({ "c": 3  }),
+            extra_assertions: &|crate::utils::testing::EAArgs { .. }| {
+                Box::pin(async move {
+                    assert!(true);
+                })
+            },
+        },
+    }
+
+    // crate::integration_table_tests_shorthand!{
+    //     integ_table_test_sum_short,
+    //     uri: "/sum",
+    //     method: "POST",
+    //     router: sum_router(),
+    // }
+    //
+    // integ_table_test_sum_short! {
+    //     succeeds: {
+    //         status: axum::http::StatusCode::OK,
+    //         body: serde_json::json!({ "a": 1, "b": 2 }),
+    //         check_json: serde_json::json!({ "c": 3  }),
+    //         extra_assertions: &|crate::utils::testing::EAArgs { .. }| {
+    //             Box::pin(async move {
+    //                 assert!(true);
+    //             })
+    //         },
+    //     },
+    // }
+}
