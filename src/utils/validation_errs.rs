@@ -11,7 +11,7 @@ use std::{
     collections::{BTreeMap, HashMap},
 };
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub struct ValidationError {
     pub code: Cow<'static, str>,

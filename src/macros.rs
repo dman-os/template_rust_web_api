@@ -258,7 +258,7 @@ macro_rules! integration_table_tests {
             #[allow(unused_variables)]
             #[tokio::test]
             async fn $name() {
-                let mut ctx = crate::utils::testing::TestContext::new(crate::function_full!()).await;
+                let mut ctx = $crate::utils::testing::TestContext::new($crate::function_full!()).await;
                 {
                     let mut request = axum::http::Request::builder()
                                         .method($method)
@@ -276,13 +276,13 @@ macro_rules! integration_table_tests {
                     //     .await
                     //     .unwrap_or_log()
                     //     .token;
-                    let token: Option<String> = crate::optional_expr!($($auth_token)?);
+                    let token: Option<String> = $crate::optional_expr!($($auth_token)?);
                     if let Some(token) = token.as_ref() {
                         request = request
                                 .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"));
                     }
 
-                    let json: Option<serde_json::Value> = crate::optional_expr!($($json_body)?);
+                    let json: Option<serde_json::Value> = $crate::optional_expr!($($json_body)?);
                     let request = if let Some(json_body) = json {
                         request
                             .header(axum::http::header::CONTENT_TYPE, "application/json")
@@ -303,7 +303,7 @@ macro_rules! integration_table_tests {
                     let status_code = $status;
                     assert_eq!(res.status(), status_code, "response: {:?}", res);
 
-                    let check_json: Option<serde_json::Value> = crate::optional_expr!($($check_json)?);
+                    let check_json: Option<serde_json::Value> = $crate::optional_expr!($($check_json)?);
 
                     let (head, body) = res.into_parts();
                     let response_json: Option<serde_json::Value> = hyper::body::to_bytes(body)
@@ -314,18 +314,18 @@ macro_rules! integration_table_tests {
                         );
                     if let Some(check_json) = check_json {
                         let response_json = response_json.as_ref().unwrap();
-                        crate::utils::testing::check_json(
+                        $crate::utils::testing::check_json(
                             ("check", &check_json),
                             ("response", &response_json)
                         );
                     }
-                    let print_response: Option<bool> = crate::optional_expr!($($print_res)?);
+                    let print_response: Option<bool> = $crate::optional_expr!($($print_res)?);
                     if let Some(true) = print_response {
                         tracing::info!(head = ?head, "reponse_json: {:#?}", response_json);
                     }
 
-                    use crate::utils::testing::{ExtraAssertions, EAArgs};
-                    let extra_assertions: Option<&ExtraAssertions> = crate::optional_expr!($($extra_fn)?);
+                    use $crate::utils::testing::{ExtraAssertions, EAArgs};
+                    let extra_assertions: Option<&ExtraAssertions> = $crate::optional_expr!($($extra_fn)?);
                     if let Some(extra_assertions) = extra_assertions {
                         extra_assertions(EAArgs{
                             ctx: &mut ctx,
@@ -370,7 +370,7 @@ macro_rules! integration_table_tests_shorthand {
                         mod $sname {
                             #![ allow( unused_imports ) ]
                             use super::*;
-                            crate::integration_table_tests!{
+                            $crate::integration_table_tests!{
                                 $d(
                                     $d name: {
                                         optional_ident!(
@@ -526,7 +526,7 @@ mod tests {
             check_json: serde_json::json!({ "c": 3  }),
             extra_assertions: &|crate::utils::testing::EAArgs { .. }| {
                 Box::pin(async move {
-                    assert!(true);
+                    // do stutff
                 })
             },
         },

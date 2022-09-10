@@ -3,19 +3,36 @@ use deps::*;
 use crate::*;
 
 use serde::{Deserialize, Serialize};
+use utils::*;
 use validator::Validate;
 
 #[derive(Debug, Clone)]
 pub struct Authenticate;
 
-#[derive(Debug, Deserialize, Validate)]
+/// Either `username` or `email`  must be present
+#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
+#[validate(schema(function = "validate_response", skip_on_field_errors = false))]
 pub struct Request {
     pub username: Option<String>,
     pub email: Option<String>,
     pub password: String,
 }
 
+fn validate_response(request: &Request) -> Result<(), validator::ValidationError> {
+    if request.email.is_none() && request.username.is_none() {
+        Err(validator::ValidationError {
+            code: "invalid".into(),
+            message: Some("unable to find email or phoneNumber".into()),
+            params: Default::default(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
+/// `token` currently appears to be a UUID but don't rely one this as this may
+/// change in the future.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub struct Response {
@@ -34,7 +51,7 @@ pub enum Error {
     #[error("invalid input: {issues:?}")]
     InvalidInput {
         #[from]
-        issues: validator::ValidationErrors,
+        issues: ValidationErrors,
     },
     #[error("internal server error: {message:?}")]
     Internal { message: String },
@@ -51,6 +68,8 @@ impl Endpoint for Authenticate {
         ctx: &crate::Context,
         request: Self::Request,
     ) -> Result<Self::Response, Self::Error> {
+        validator::Validate::validate(&request).map_err(utils::ValidationErrors::from)?;
+
         let null_str = "NULL".to_string();
 
         let result = sqlx::query!(
@@ -158,7 +177,7 @@ impl DocumentedEndpoint for Authenticate {
                                 .collect(),
                             },
                         );
-                        issues
+                        issues.into()
                     },
                 },
             ),

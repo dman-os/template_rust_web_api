@@ -9,7 +9,7 @@ use validator::Validate;
 #[derive(Debug, Clone)]
 pub struct CreateUser;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub struct Request {
     #[validate(length(min = 5))]

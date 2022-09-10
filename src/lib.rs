@@ -1,4 +1,4 @@
-#![allow(clippy::single_component_path_imports)]
+#![allow(clippy::single_component_path_imports, clippy::let_and_return)]
 
 #[cfg(feature = "dylink")]
 #[allow(unused_imports)]
@@ -272,6 +272,31 @@ fn test_axum_path_str_to_openapi() {
     }
 }
 
+pub fn axum_path_parameter_list(path: &str) -> Vec<String> {
+    path.split('/')
+        .filter(|s| !s.is_empty())
+        .filter(|s| &s[0..1] == ":")
+        .map(|s| s[1..].to_string())
+        .collect()
+}
+
+#[test]
+fn test_axum_path_paramter_list() {
+    for (expected, path) in [
+        (vec!["id".to_string()], "/users/:id"),
+        (
+            vec!["id".to_string(), "resID".to_string()],
+            "/users/:id/resource/:resID",
+        ),
+    ] {
+        assert_eq!(
+            expected,
+            &axum_path_parameter_list(path)[..],
+            "failed on {path}"
+        );
+    }
+}
+
 pub trait ToRefOrSchema {
     fn schema_name() -> &'static str;
     fn ref_or_schema() -> utoipa::openapi::schema::RefOr<utoipa::openapi::schema::Schema>;
@@ -320,11 +345,125 @@ where
     }
 }
 
+pub enum ParameterDoc {
+    Param(Box<utoipa::openapi::path::Parameter>),
+    Body(Box<utoipa::openapi::request_body::RequestBody>),
+}
+
+impl From<utoipa::openapi::path::Parameter> for ParameterDoc {
+    fn from(param: utoipa::openapi::path::Parameter) -> Self {
+        Self::Param(Box::new(param))
+    }
+}
+
+impl From<utoipa::openapi::request_body::RequestBody> for ParameterDoc {
+    fn from(body: utoipa::openapi::request_body::RequestBody) -> Self {
+        Self::Body(Box::new(body))
+    }
+}
+
+pub trait DocumentedParameter {
+    fn to_openapi(op_id: &str, path: &str) -> Vec<ParameterDoc>;
+}
+
+impl<T> DocumentedParameter for axum::extract::Path<T> {
+    fn to_openapi(_op_id: &str, path: &str) -> Vec<ParameterDoc> {
+        axum_path_parameter_list(path)
+            .into_iter()
+            .map(|name| {
+                utoipa::openapi::path::ParameterBuilder::new()
+                    .name(name)
+                    .parameter_in(utoipa::openapi::path::ParameterIn::Path)
+                    .required(utoipa::openapi::Required::True)
+                    .build()
+                    .into()
+            })
+            .collect()
+    }
+}
+
+impl<T> DocumentedParameter for axum::extract::Json<T>
+where
+    T: ToRefOrSchema,
+{
+    fn to_openapi(_op_id: &str, _path: &str) -> Vec<ParameterDoc> {
+        vec![utoipa::openapi::request_body::RequestBodyBuilder::new()
+            .content(
+                "application/json",
+                utoipa::openapi::ContentBuilder::new()
+                    .schema(match T::ref_or_schema() {
+                        utoipa::openapi::schema::RefOr::T(schema) => {
+                            if T::schema_name() == "Request" {
+                                schema.into()
+                            } else {
+                                utoipa::openapi::Ref::from_schema_name(T::schema_name().to_string())
+                                    .into()
+                            }
+                        }
+                        ref_or => ref_or,
+                    })
+                    .build(),
+            )
+            // .name("body")
+            // .parameter_in(utoipa::openapi::path::ParameterIn::Path)
+            // .required(utoipa::openapi::Required::True)
+            .build()
+            .into()]
+    }
+}
+
+impl<T> DocumentedParameter for Option<T>
+where
+    T: DocumentedParameter,
+{
+    fn to_openapi(op_id: &str, path: &str) -> Vec<ParameterDoc> {
+        let mut vec = T::to_openapi(op_id, path);
+        for param in &mut vec {
+            match param {
+                ParameterDoc::Param(param) => {
+                    param.required = utoipa::openapi::Required::False;
+                }
+                ParameterDoc::Body(body) => {
+                    body.required = Some(utoipa::openapi::Required::False);
+                }
+            }
+        }
+        vec
+    }
+}
+impl DocumentedParameter for () {
+    fn to_openapi(_op_id: &str, _path: &str) -> Vec<ParameterDoc> {
+        vec![]
+    }
+}
+
+impl<T> DocumentedParameter for (T,)
+where
+    T: DocumentedParameter,
+{
+    fn to_openapi(op_id: &str, path: &str) -> Vec<ParameterDoc> {
+        T::to_openapi(op_id, path)
+    }
+}
+
+impl<T1, T2> DocumentedParameter for (T1, T2)
+where
+    T1: DocumentedParameter,
+    T2: DocumentedParameter,
+{
+    fn to_openapi(op_id: &str, path: &str) -> Vec<ParameterDoc> {
+        let mut vec = T1::to_openapi(op_id, path);
+        vec.append(&mut T2::to_openapi(op_id, path));
+        vec
+    }
+}
+
 pub trait DocumentedEndpoint: HttpEndpoint + Sized
 where
     Self::Response: ToRefOrSchema + serde::Serialize,
     Self::Error: ToRefOrSchema + serde::Serialize,
     for<'a> &'a Self::Error: Into<StatusCode>,
+    Self::Parameters: DocumentedParameter,
 {
     const TAG: &'static Tag = &DEFAULT_TAG;
     const SUMMARY: &'static str = "";
@@ -337,6 +476,20 @@ where
 
     fn path_item() -> utoipa::openapi::PathItem {
         let id = <Self as TypeNameRaw>::type_name_raw();
+        let (params, bodies) = Self::Parameters::to_openapi(id, Self::PATH)
+            .into_iter()
+            .fold((vec![], vec![]), |(mut params, mut bodies), doc| {
+                match doc {
+                    ParameterDoc::Param(param) => {
+                        params.push(*param);
+                    }
+                    ParameterDoc::Body(body) => {
+                        bodies.push(*body);
+                    }
+                }
+                (params, bodies)
+            });
+        assert!(bodies.len() < 2, "{id} has more than one Body ParameterDoc");
         utoipa::openapi::PathItem::new(
                 Self::METHOD,
                 utoipa::openapi::path::OperationBuilder::new()
@@ -364,17 +517,21 @@ where
                             &str,
                         >("api_key", [""]),
                     ]))
-                    .parameter(
-                        utoipa::openapi::path::ParameterBuilder::new()
-                            .name("id")
-                            .parameter_in(utoipa::openapi::path::ParameterIn::Path)
-                            .required(utoipa::openapi::Required::True)
-                            .schema(Some(
-                                utoipa::openapi::ObjectBuilder::new()
-                                    .schema_type(utoipa::openapi::SchemaType::String)
-                                    .format(Some(utoipa::openapi::SchemaFormat::Uuid)),
-                            )),
-                    )
+                    .request_body(bodies.into_iter().next())
+                    .parameters(Some({
+                    params
+                    // [
+                        // utoipa::openapi::path::ParameterBuilder::new()
+                        //     .name("id")
+                        //     .parameter_in(utoipa::openapi::path::ParameterIn::Path)
+                        //     .required(utoipa::openapi::Required::True)
+                        //     .schema(Some(
+                        //         utoipa::openapi::ObjectBuilder::new()
+                        //             .schema_type(utoipa::openapi::SchemaType::String)
+                        //             .format(Some(utoipa::openapi::SchemaFormat::Uuid)),
+                        //     )),
+                    // ]
+                    }))
                     .responses({
                         let mut builder = utoipa::openapi::ResponsesBuilder::new();
                         {
@@ -397,11 +554,12 @@ where
                                                 .build()
                                             },
                                             // else, assume generic name
-                                            utoipa::openapi::schema::RefOr::T(_) => {
+                                            utoipa::openapi::schema::RefOr::T(schema) => {
                                             utoipa::openapi::ContentBuilder::new()
-                                                .schema(utoipa::openapi::Ref::from_schema_name(
-                                                    format!("{id}Response"),
-                                                ))
+                                                // .schema(utoipa::openapi::Ref::from_schema_name(
+                                                //     format!("{id}Response"),
+                                                // ))
+                                                .schema(schema)
                                                 .example(Some(serde_json::to_value(resp).unwrap()))
                                                 .build()
                                             },
@@ -419,9 +577,10 @@ where
                                     .content(
                                         "application/json",
                                         utoipa::openapi::ContentBuilder::new()
-                                            .schema(utoipa::openapi::Ref::from_schema_name(
-                                                format!("{id}Error"),
-                                            ))
+                                            // .schema(utoipa::openapi::Ref::from_schema_name(
+                                            //     format!("{id}Error"),
+                                            // ))
+                                            .schema(Self::Error::ref_or_schema())
                                             .example(Some(serde_json::to_value(err).unwrap()))
                                             .build(),
                                     )
@@ -436,23 +595,37 @@ where
     fn components(
         builder: utoipa::openapi::ComponentsBuilder,
     ) -> utoipa::openapi::ComponentsBuilder {
-        let id = <Self as TypeNameRaw>::type_name_raw();
-        [
-            (
-                format!("{id}Response"),
-                <Self::Response as ToRefOrSchema>::ref_or_schema(),
-            ),
-            (
-                format!("{id}Error"),
-                <Self::Error as ToRefOrSchema>::ref_or_schema(),
-            ),
-        ]
-        .into_iter()
-        .fold(builder, |builder, (name, ref_or)| match ref_or {
-            // assume the component has been added elsewhere
-            utoipa::openapi::schema::RefOr::Ref(_) => builder,
-            utoipa::openapi::schema::RefOr::T(schema) => builder.schema(name, schema),
-        })
+        builder
+        // let id = <Self as TypeNameRaw>::type_name_raw();
+        // let (_, bodies) = Self::Parameters::to_openapi(id, Self::PATH)
+        //     .into_iter()
+        //     .fold((vec![], vec![]), |(mut params, mut bodies), doc| {
+        //         match doc {
+        //             ParameterDoc::Param(param) => {
+        //                 params.push(param);
+        //             }
+        //             ParameterDoc::Body(body) => {
+        //                 bodies.push(body);
+        //             }
+        //         }
+        //         (params, bodies)
+        //     });
+        // [
+        //     (
+        //         format!("{id}Response"),
+        //         <Self::Response as ToRefOrSchema>::ref_or_schema(),
+        //     ),
+        //     (
+        //         format!("{id}Error"),
+        //         <Self::Error as ToRefOrSchema>::ref_or_schema(),
+        //     ),
+        // ]
+        // .into_iter()
+        // .fold(builder, |builder, (name, ref_or)| match ref_or {
+        //     // assume the component has been added elsewhere
+        //     utoipa::openapi::schema::RefOr::Ref(_) => builder,
+        //     utoipa::openapi::schema::RefOr::T(schema) => builder.schema(name, schema),
+        // })
     }
 }
 
@@ -555,6 +728,7 @@ where
     T::Response: utoipa::ToSchema + serde::Serialize,
     T::Error: utoipa::ToSchema + serde::Serialize,
     for<'a> &'a T::Error: Into<StatusCode>,
+    T::Parameters: DocumentedParameter,
 {
     fn path() -> &'static str {
         <T as HttpEndpoint>::PATH
@@ -593,5 +767,11 @@ where
             (StatusCode::UNAUTHORIZED, "Bearer token not valid utf-8").into_response()
         })?;
         Ok(Self(std::sync::Arc::from(token)))
+    }
+}
+
+impl DocumentedParameter for BearerToken {
+    fn to_openapi(_op_id: &str, _path: &str) -> Vec<ParameterDoc> {
+        vec![]
     }
 }

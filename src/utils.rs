@@ -118,7 +118,7 @@ pub mod testing {
                         .as_str(),
                 );
 
-            let mut opts = if let Some(pword) = std::env::var("TEST_DB_PASS").ok() {
+            let mut opts = if let Ok(pword) = std::env::var("TEST_DB_PASS") {
                 opts.password(pword.as_str())
             } else {
                 opts
@@ -240,11 +240,11 @@ pub mod testing {
     }
 
     pub trait JsonExt {
-        fn remove_keys_from_obj(self: Self, keys: &[&str]) -> Self;
-        fn destructure_into_self(self: Self, from: Self) -> Self;
+        fn remove_keys_from_obj(self, keys: &[&str]) -> Self;
+        fn destructure_into_self(self, from: Self) -> Self;
     }
     impl JsonExt for serde_json::Value {
-        fn remove_keys_from_obj(self: Self, keys: &[&str]) -> Self {
+        fn remove_keys_from_obj(self, keys: &[&str]) -> Self {
             match self {
                 serde_json::Value::Object(mut map) => {
                     for key in keys {
@@ -255,7 +255,7 @@ pub mod testing {
                 json => panic!("provided json was not an object: {:?}", json),
             }
         }
-        fn destructure_into_self(self: Self, from: Self) -> Self {
+        fn destructure_into_self(self, from: Self) -> Self {
             match (self, from) {
                 (serde_json::Value::Object(mut first), serde_json::Value::Object(second)) => {
                     for (key, value) in second.into_iter() {

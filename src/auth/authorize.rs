@@ -106,7 +106,6 @@ mod tests {
                 ]
                 .into_iter()
                 .flat_map(|res| {
-                    let res = res.clone();
                     [
                         Action::Read,
                         Action::Write,
