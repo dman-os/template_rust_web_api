@@ -1,3 +1,21 @@
+/// Implement [`From`] [`crate::auth::authorize::Error`] for the provided type
+/// This expects the standard unit `AccessDenied` and the struct `Internal`
+/// variant on the `Error` enum
+#[macro_export]
+macro_rules! impl_from_auth_err {
+    ($errty:ident) => {
+        impl From<$crate::auth::authorize::Error> for $errty {
+            fn from(err: $crate::auth::authorize::Error) -> Self {
+                use $crate::auth::authorize::Error;
+                match err {
+                    Error::Unauthorized | Error::InvalidToken => Self::AccessDenied,
+                    Error::Internal { message } => Self::Internal { message },
+                }
+            }
+        }
+    };
+}
+
 /// Name of currently execution function
 /// Resolves to first found in current function path that isn't a closure.
 #[macro_export]
@@ -300,11 +318,6 @@ macro_rules! integration_table_tests {
                         .await
                         .unwrap_or_log();
 
-                    let status_code = $status;
-                    assert_eq!(res.status(), status_code, "response: {:?}", res);
-
-                    let check_json: Option<serde_json::Value> = $crate::optional_expr!($($check_json)?);
-
                     let (head, body) = res.into_parts();
                     let response_json: Option<serde_json::Value> = hyper::body::to_bytes(body)
                         .await
@@ -312,6 +325,15 @@ macro_rules! integration_table_tests {
                         .and_then(|body|
                             serde_json::from_slice(&body).ok()
                         );
+
+                    let status_code = $status;
+                    assert_eq!(
+                        head.status,
+                        status_code,
+                        "response: {head:?}\n{response_json:?}"
+                    );
+
+                    let check_json: Option<serde_json::Value> = $crate::optional_expr!($($check_json)?);
                     if let Some(check_json) = check_json {
                         let response_json = response_json.as_ref().unwrap();
                         $crate::utils::testing::check_json(
@@ -319,6 +341,7 @@ macro_rules! integration_table_tests {
                             ("response", &response_json)
                         );
                     }
+
                     let print_response: Option<bool> = $crate::optional_expr!($($print_res)?);
                     if let Some(true) = print_response {
                         tracing::info!(head = ?head, "reponse_json: {:#?}", response_json);
@@ -330,7 +353,8 @@ macro_rules! integration_table_tests {
                         extra_assertions(EAArgs{
                             ctx: &mut ctx,
                             auth_token: token,
-                            response_json
+                            response_json,
+                            response_head: head
                         }).await;
                     }
                 }
@@ -340,7 +364,7 @@ macro_rules! integration_table_tests {
     }
 }
 
-// FIXME: 
+// FIXME:
 #[macro_export]
 macro_rules! integration_table_tests_shorthand {
     (
@@ -485,9 +509,9 @@ mod tests {
         use axum::Json;
         axum::Router::new().route(
             "/sum",
-            axum::routing::post(
-                |Json(args): Json<Args>| async move { Json(serde_json::json!({ "c": (args.a + args.b) })) },
-            ),
+            axum::routing::post(|Json(args): Json<Args>| async move {
+                Json(serde_json::json!({ "c": (args.a + args.b) }))
+            }),
         )
     }
 

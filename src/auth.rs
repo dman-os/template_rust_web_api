@@ -38,8 +38,7 @@ pub mod authenticate;
 pub mod authorize;
 
 pub fn router() -> axum::Router {
-    axum::Router::new()
-        .merge(EndpointWrapper::new(authenticate::Authenticate))
+    axum::Router::new().merge(EndpointWrapper::new(authenticate::Authenticate))
 }
 
 pub fn components(

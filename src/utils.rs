@@ -1,4 +1,3 @@
-
 /* #[derive(serde::Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub struct ErrorResponse<T> {
@@ -33,9 +32,31 @@ fn test_type_name_macro() {
     assert_eq!("Foo", Foo::type_name_raw());
 }
 
+/*
+/// Serde deserialization decorator to map empty Strings to None,
+fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    use serde::Deserialize;
+    let opt = Option::<String>::deserialize(de)?;
+    match opt.as_deref() {
+        None | Some("") => Ok(None),
+        Some(s) => std::str::FromStr::from_str(s).map_err(serde::de::Error::custom).map(Some),
+    }
+}
+*/
+
 #[cfg(test)]
 pub mod testing {
     use deps::*;
+
+    pub use crate::auth::testing::*;
+    pub use axum::http;
+    pub use axum::http::StatusCode;
+    pub use tower::ServiceExt;
 
     use crate::{Context, SharedContext};
 
@@ -48,7 +69,7 @@ pub mod testing {
         tracing_subscriber::fmt()
             // .pretty()
             .compact()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_env_filter(tracing_subscriber::EnvFilter::from_env("RUST_LOG_TEST"))
             .with_timer(tracing_subscriber::fmt::time::uptime())
             .try_init()
             .map_err(|err| eyre::eyre!(err))?;
@@ -70,6 +91,7 @@ pub mod testing {
     pub struct ExtraAssertionAgs<'a> {
         pub ctx: &'a mut TestContext,
         pub auth_token: Option<String>,
+        pub response_head: axum::http::response::Parts,
         pub response_json: Option<serde_json::Value>,
     }
 

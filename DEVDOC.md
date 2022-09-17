@@ -14,6 +14,7 @@ If you're in a team, just use your git host's features or something.
   - [ ] 2FA
   - [ ] SSO
 - [ ] Logging
+- [ ] Replace UUIDs with HashIDs for user id
 
 ## design-doc
 

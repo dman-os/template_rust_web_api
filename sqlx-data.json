@@ -50,6 +50,32 @@
     },
     "query": "\nSELECT \n    id,\n    created_at,\n    updated_at,\n    email::TEXT as \"email!\",\n    username::TEXT as \"username!\",\n    pic_url\nFROM users\nWHERE id = $1::uuid\n            "
   },
+  "731a8e4169e1990b8ae7dec11897b57e9145018e171a50019c3ffb1470601322": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "pass_hash",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\nSELECT user_id, pass_hash\nFROM credentials\nWHERE user_id = (\n    SELECT id\n    FROM users\n    WHERE email = $1::TEXT::CITEXT OR username = $1::TEXT::CITEXT\n)\n        "
+  },
   "7a9557256e0d5ae2e0575983c22e4324d873aaf4da368f410a7c34854f7629e3": {
     "describe": {
       "columns": [
@@ -145,33 +171,6 @@
       }
     },
     "query": "\nSELECT\n    id as \"id!\",\n    created_at as \"created_at!\",\n    updated_at as \"updated_at!\",\n    email::TEXT as \"email!\",\n    username::TEXT as \"username!\",\n    pic_url\nFROM create_user($1::TEXT::CITEXT, $2::TEXT::CITEXT, $3)\n                "
-  },
-  "aa0048e56f49ea961df996ea2cb1b4a09adb843a2197a33b5929c2d760c1b707": {
-    "describe": {
-      "columns": [
-        {
-          "name": "user_id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "pass_hash",
-          "ordinal": 1,
-          "type_info": "Text"
-        }
-      ],
-      "nullable": [
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text",
-          "Text"
-        ]
-      }
-    },
-    "query": "\nSELECT user_id, pass_hash\nFROM credentials\nWHERE user_id = (\n    SELECT id\n    FROM users\n    WHERE email = $1::TEXT::CITEXT OR username = $2::TEXT::CITEXT\n)\n        "
   },
   "fa949c2348fddf0672d9733365722080db0048ec1bce4361569f12ef55721dcb": {
     "describe": {

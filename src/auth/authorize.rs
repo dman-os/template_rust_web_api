@@ -10,7 +10,7 @@ pub struct Authorize;
 
 #[derive(Debug)]
 pub struct Request {
-    pub token: std::sync::Arc<str>,
+    pub auth_token: std::sync::Arc<str>,
     pub resource: Resource,
     pub action: Action,
 }
@@ -47,7 +47,7 @@ SELECT *
 FROM sessions
 WHERE token = $1
             "#,
-            &request.token[..]
+            &request.auth_token[..]
         )
         .fetch_one(&ctx.db_pool)
         .await
@@ -79,17 +79,16 @@ mod tests {
             let ctx = TestContext::new(crate::function!()).await;
             {
                 let res = authenticate::Authenticate.handle(&ctx.ctx(), authenticate::Request{
-                    username: Some(username.into()),
-                    email: None,
+                    identifier: username.to_string(),
                     password: "password".into()
                 }).await.unwrap_or_log();
                 for (resource, action) in resource_actions {
                     let user_id = authorize::Authorize.handle(&ctx.ctx(), authorize::Request {
-                        token: res.token.clone().into(),
+                        auth_token: res.token.clone().into(),
                         resource,
                         action
                     }).await.unwrap_or_log();
-                    assert_eq!(id, user_id.to_string());
+                    assert_eq!(id, user_id);
                 }
             }
             ctx.close().await;
@@ -102,7 +101,7 @@ mod tests {
             USER_01_ID,
             {
                 [
-                    Resource::User { id: USER_01_ID.parse().unwrap() }
+                    Resource::User { id: USER_01_ID }
                 ]
                 .into_iter()
                 .flat_map(|res| {

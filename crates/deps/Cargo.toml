@@ -56,7 +56,11 @@ uuid = { version = "1", features = ["v4", "fast-rng", "serde"] }
 
 # config = { version = "0.13", features = ["toml"] }
 dotenvy = "0.15"
+
 argon2 = { package = "rust-argon2", version = "1.0.0" }
+brotli = "*"
+base64 = "*"
+
 redis = { version = "0.21", features = ["tokio-comp", "tokio-native-tls-comp", "streams", "connection-manager"] }
 bb8-redis = "0.11"
 

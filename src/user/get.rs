@@ -11,7 +11,7 @@ pub struct GetUser;
 
 #[derive(Debug)]
 pub struct Request {
-    token: std::sync::Arc<str>,
+    auth_token: std::sync::Arc<str>,
     id: uuid::Uuid,
 }
 
@@ -26,15 +26,7 @@ pub enum Error {
     Internal { message: String },
 }
 
-impl From<auth::authorize::Error> for Error {
-    fn from(err: auth::authorize::Error) -> Self {
-        use auth::authorize::Error;
-        match err {
-            Error::Unauthorized | Error::InvalidToken => Self::AccessDenied,
-            Error::Internal { message } => Self::Internal { message },
-        }
-    }
-}
+crate::impl_from_auth_err!(Error);
 
 pub type Response = Ref<super::User>;
 
@@ -46,7 +38,7 @@ impl crate::AuthenticatedEndpoint for GetUser {
 
     fn authorize_request(&self, request: &Self::Request) -> crate::auth::authorize::Request {
         crate::auth::authorize::Request {
-            token: request.token.clone(),
+            auth_token: request.auth_token.clone(),
             resource: crate::auth::Resource::User { id: request.id },
             action: crate::auth::Action::Read,
         }
@@ -108,7 +100,10 @@ impl HttpEndpoint for GetUser {
     fn request(
         (BearerToken(token), Path(id)): Self::Parameters,
     ) -> Result<Self::Request, Self::Error> {
-        Ok(self::Request { token, id })
+        Ok(self::Request {
+            auth_token: token,
+            id,
+        })
     }
 }
 
@@ -127,7 +122,8 @@ impl DocumentedEndpoint for GetUser {
                 email: USER_01_EMAIL.into(),
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
-            }.into(),
+            }
+            .into(),
         )
     }
 
@@ -155,9 +151,7 @@ mod tests {
     use deps::*;
 
     use crate::user::testing::*;
-    use crate::auth::testing::*;
-
-    use axum::http::StatusCode;
+    use crate::utils::testing::*;
 
     macro_rules! get_user_integ {
         ($(

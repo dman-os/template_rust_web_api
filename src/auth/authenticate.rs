@@ -3,32 +3,15 @@ use deps::*;
 use crate::*;
 
 use serde::{Deserialize, Serialize};
-use utils::*;
-use validator::Validate;
 
 #[derive(Debug, Clone)]
 pub struct Authenticate;
 
-/// Either `username` or `email`  must be present
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
-#[validate(schema(function = "validate_response", skip_on_field_errors = false))]
 pub struct Request {
-    pub username: Option<String>,
-    pub email: Option<String>,
+    pub identifier: String,
     pub password: String,
-}
-
-fn validate_response(request: &Request) -> Result<(), validator::ValidationError> {
-    if request.email.is_none() && request.username.is_none() {
-        Err(validator::ValidationError {
-            code: "invalid".into(),
-            message: Some("unable to find email or phoneNumber".into()),
-            params: Default::default(),
-        })
-    } else {
-        Ok(())
-    }
 }
 
 /// `token` currently appears to be a UUID but don't rely one this as this may
@@ -48,11 +31,6 @@ pub struct Response {
 pub enum Error {
     #[error("credentials rejected")]
     CredentialsRejected,
-    #[error("invalid input: {issues:?}")]
-    InvalidInput {
-        #[from]
-        issues: ValidationErrors,
-    },
     #[error("internal server error: {message:?}")]
     Internal { message: String },
 }
@@ -68,10 +46,6 @@ impl Endpoint for Authenticate {
         ctx: &crate::Context,
         request: Self::Request,
     ) -> Result<Self::Response, Self::Error> {
-        validator::Validate::validate(&request).map_err(utils::ValidationErrors::from)?;
-
-        let null_str = "NULL".to_string();
-
         let result = sqlx::query!(
             r#"
 SELECT user_id, pass_hash
@@ -79,11 +53,10 @@ FROM credentials
 WHERE user_id = (
     SELECT id
     FROM users
-    WHERE email = $1::TEXT::CITEXT OR username = $2::TEXT::CITEXT
+    WHERE email = $1::TEXT::CITEXT OR username = $1::TEXT::CITEXT
 )
         "#,
-            request.email.as_ref().unwrap_or(&null_str),
-            request.username.as_ref().unwrap_or(&null_str),
+            &request.identifier,
         )
         .fetch_one(&ctx.db_pool)
         .await
@@ -147,7 +120,7 @@ impl DocumentedEndpoint for Authenticate {
 
     fn successs() -> SuccessResponse<Self::Response> {
         (
-            "Success creating a User object",
+            "Success authenticating.",
             Self::Response {
                 user_id: Default::default(),
                 token: "mcpqwen8y3489nc8y2pf".into(),
@@ -159,28 +132,6 @@ impl DocumentedEndpoint for Authenticate {
     fn errors() -> Vec<ErrorResponse<Self::Error>> {
         vec![
             ("Credentials rejected", Error::CredentialsRejected),
-            (
-                "Invalid input",
-                Error::InvalidInput {
-                    issues: {
-                        let mut issues = validator::ValidationErrors::new();
-                        issues.add(
-                            "email",
-                            validator::ValidationError {
-                                code: std::borrow::Cow::from("email"),
-                                message: None,
-                                params: [(
-                                    std::borrow::Cow::from("value"),
-                                    serde_json::json!("bad.email.com"),
-                                )]
-                                .into_iter()
-                                .collect(),
-                            },
-                        );
-                        issues.into()
-                    },
-                },
-            ),
             (
                 "Internal server error",
                 Error::Internal {
@@ -195,7 +146,7 @@ impl From<&Error> for axum::http::StatusCode {
     fn from(err: &Error) -> Self {
         use Error::*;
         match err {
-            CredentialsRejected { .. } | InvalidInput { .. } => Self::BAD_REQUEST,
+            CredentialsRejected { .. } => Self::BAD_REQUEST,
             Internal { .. } => Self::INTERNAL_SERVER_ERROR,
         }
     }
@@ -205,56 +156,11 @@ impl From<&Error> for axum::http::StatusCode {
 mod tests {
     use deps::*;
 
-    use super::Request;
-
     use crate::user::testing::*;
     use crate::utils::testing::*;
 
     use axum::http;
     use tower::ServiceExt;
-
-    fn fixture_request() -> Request {
-        serde_json::from_value(fixture_request_json()).unwrap()
-    }
-
-    fn fixture_request_json() -> serde_json::Value {
-        serde_json::json!({
-            "username": USER_01_USERNAME,
-            "email": USER_01_EMAIL,
-            "password": "password",
-        })
-    }
-
-    crate::table_tests! {
-        authenticate_validate,
-        (request, err_field),
-        {
-            match validator::Validate::validate(&request) {
-                Ok(()) => {
-                    if let Some(err_field) = err_field {
-                        panic!("validation succeeded, was expecting err on field: {err_field}");
-                    }
-                }
-                Err(err) => {
-                    let err_field = err_field.expect("unexpected validation failure");
-                    if !err.field_errors().contains_key(&err_field) {
-                        panic!("validation didn't fail on expected field: {err_field}, {err:?}");
-                    }
-                }
-            }
-        }
-    }
-
-    authenticate_validate! {
-        rejects_if_neither_email_or_username_found: (
-            Request {
-                username: None,
-                email: None,
-                ..fixture_request()
-            },
-            Some("email"),
-        ),
-    }
 
     #[tokio::test]
     async fn authenticate_works_with_username() {
@@ -262,7 +168,10 @@ mod tests {
         {
             let app = crate::auth::router().layer(axum::Extension(ctx.ctx()));
 
-            let body_json = fixture_request_json().remove_keys_from_obj(&["email"]);
+            let body_json = serde_json::json!({
+                "identifier": USER_01_USERNAME,
+                "password": "password",
+            });
             let resp = app
                 .oneshot(
                     http::Request::builder()
@@ -280,7 +189,7 @@ mod tests {
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_log();
             assert!(body["expiresAt"].is_number());
             assert!(body["token"].is_string());
-            assert_eq!(USER_01_ID, body["userId"].as_str().unwrap());
+            assert_eq!(USER_01_ID.to_string(), body["userId"].as_str().unwrap());
 
             let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
             let resp = app
@@ -308,7 +217,10 @@ mod tests {
         {
             let app = crate::auth::router().layer(axum::Extension(ctx.ctx()));
 
-            let body_json = fixture_request_json().remove_keys_from_obj(&["username"]);
+            let body_json = serde_json::json!({
+                "identifier": USER_01_EMAIL,
+                "password": "password",
+            });
             let resp = app
                 .oneshot(
                     http::Request::builder()
@@ -326,7 +238,7 @@ mod tests {
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_log();
             assert!(body["expiresAt"].is_number());
             assert!(body["token"].is_string());
-            assert_eq!(USER_01_ID, body["userId"].as_str().unwrap());
+            assert_eq!(USER_01_ID.to_string(), body["userId"].as_str().unwrap());
 
             let app = crate::user::router().layer(axum::Extension(ctx.ctx()));
             let resp = app
@@ -354,13 +266,10 @@ mod tests {
         {
             let app = crate::auth::router().layer(axum::Extension(ctx.ctx()));
 
-            let body_json = fixture_request_json()
-                .remove_keys_from_obj(&["email"])
-                .destructure_into_self(serde_json::json!(
-                    {
-                        "username": "NEWSTUFF"
-                    }
-                ));
+            let body_json = serde_json::json!({
+                "identifier": "golden_eel",
+                "password": "password",
+            });
             let resp = app
                 .oneshot(
                     http::Request::builder()
@@ -395,13 +304,10 @@ mod tests {
         {
             let app = crate::auth::router().layer(axum::Extension(ctx.ctx()));
 
-            let body_json = fixture_request_json()
-                .remove_keys_from_obj(&["username"])
-                .destructure_into_self(serde_json::json!(
-                    {
-                        "email": "xan@da.man"
-                    }
-                ));
+            let body_json = serde_json::json!({
+                "identifier": "xan@da.man",
+                "password": "password",
+            });
             let resp = app
                 .oneshot(
                     http::Request::builder()
@@ -436,13 +342,10 @@ mod tests {
         {
             let app = crate::auth::router().layer(axum::Extension(ctx.ctx()));
 
-            let body_json = fixture_request_json()
-                .remove_keys_from_obj(&["username"])
-                .destructure_into_self(serde_json::json!(
-                    {
-                        "password": "apeshitapeshit"
-                    }
-                ));
+            let body_json = serde_json::json!({
+                "identifier": USER_01_EMAIL,
+                "password": "apeshit",
+            });
             let resp = app
                 .oneshot(
                     http::Request::builder()

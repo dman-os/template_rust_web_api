@@ -1,0 +1,757 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "template_rust_web_api",
+    "description": "Opinionated template repository for an HTTP API.\n\nNotes:\n- Time values are integers despite the `string($date-time)` type shown here.\n                        ",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/authenticate": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Create a new User resource.",
+        "operationId": "Authenticate",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "identifier",
+                  "password"
+                ],
+                "properties": {
+                  "identifier": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success authenticating.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "`token` currently appears to be a UUID but don't rely one this as this may",
+                  "required": [
+                    "userId",
+                    "token",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": 1234567
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                "example": {
+                  "expiresAt": 1663427772,
+                  "token": "mcpqwen8y3489nc8y2pf",
+                  "userId": "00000000-0000-0000-0000-000000000000"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Credentials rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticateError"
+                },
+                "example": {
+                  "error": "credentialsRejected"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticateError"
+                },
+                "example": {
+                  "error": "internal",
+                  "message": "internal server error"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "user"
+        ],
+        "summary": "List the User objects.",
+        "operationId": "ListUsers",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSortingField>"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success getting Users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "cursor": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/T"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "cursor": null,
+                  "items": [
+                    {
+                      "createdAt": 1663427772,
+                      "email": "hex.queen@teen.dj",
+                      "id": "00000000-0000-0000-0000-000000000000",
+                      "picUrl": "https:://example.com/picture.jpg",
+                      "updatedAt": 1663427772,
+                      "username": "sabrina"
+                    },
+                    {
+                      "createdAt": 1663427772,
+                      "email": "archie1941@poetry.ybn",
+                      "id": "00000000-0000-0000-0000-000000000000",
+                      "picUrl": null,
+                      "updatedAt": 1663427772,
+                      "username": "archie"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUsersError"
+                },
+                "example": {
+                  "error": "invalidInput",
+                  "issues": {
+                    "limit": [
+                      {
+                        "code": "range",
+                        "message": null,
+                        "params": {
+                          "value": 0
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUsersError"
+                },
+                "example": {
+                  "error": "accessDenied"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUsersError"
+                },
+                "example": {
+                  "error": "internal",
+                  "message": "internal server error"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "bearer": [
+              ""
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "user"
+        ],
+        "summary": "Create a new User resource.",
+        "operationId": "CreateUser",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success creating a User object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                },
+                "example": {
+                  "createdAt": 1663427772,
+                  "email": "hex.queen@teen.dj",
+                  "id": "00000000-0000-0000-0000-000000000000",
+                  "picUrl": "https:://example.com/picture.jpg",
+                  "updatedAt": 1663427772,
+                  "username": "sabrina"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateUserError"
+                },
+                "example": {
+                  "error": "invalidInput",
+                  "issues": {
+                    "email": [
+                      {
+                        "code": "email",
+                        "message": null,
+                        "params": {
+                          "value": "bad.email.com"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateUserError"
+                },
+                "example": {
+                  "error": "internal",
+                  "message": "internal server error"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": [
+          "user"
+        ],
+        "summary": "Get the User at the given id",
+        "operationId": "GetUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success getting User",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                },
+                "example": {
+                  "createdAt": 1663427772,
+                  "email": "hex.queen@teen.dj",
+                  "id": "00000000-0000-0000-0000-000000000000",
+                  "picUrl": "https:://example.com/picture.jpg",
+                  "updatedAt": 1663427772,
+                  "username": "sabrina"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUserError"
+                },
+                "example": {
+                  "error": "accessDenied"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUserError"
+                },
+                "example": {
+                  "error": "notFound",
+                  "id": "00000000-0000-0000-0000-000000000000"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUserError"
+                },
+                "example": {
+                  "error": "internal",
+                  "message": "internal server error"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "bearer": [
+              ""
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthenticateError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "credentialsRejected"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "CreateUserError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "username",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "usernameOccupied"
+                ]
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "email",
+              "error"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string",
+                "enum": [
+                  "emailOccupied"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "issues",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "invalidInput"
+                ]
+              },
+              "issues": {
+                "$ref": "#/components/schemas/ValidationErrors"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "GetUserError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "notFound"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "accessDenied"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ListUsersError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "accessDenied"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "issues",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "invalidInput"
+                ]
+              },
+              "issues": {
+                "$ref": "#/components/schemas/ValidationErrors"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "email",
+          "username"
+        ],
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "In seconds since unix epoch in UTC.",
+            "example": 1234567
+          },
+          "email": {
+            "type": "string",
+            "example": "alice@example.com"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "picUrl": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "In seconds since unix epoch in UTC.",
+            "example": 1234567
+          },
+          "username": {
+            "type": "string",
+            "example": "hunter2"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "required": [
+          "code",
+          "params"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "ValidationErrors": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/ValidationErrorsKind"
+        }
+      },
+      "ValidationErrorsKind": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "Object": {
+                "$ref": "#/components/schemas/ValidationErrors"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "List": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ValidationErrors"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "Field": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "The authentication and authorization services."
+    },
+    {
+      "name": "user",
+      "description": "Manipulate User objects."
+    },
+    {
+      "name": "api",
+      "description": "This is the catch all tag."
+    }
+  ]
+}

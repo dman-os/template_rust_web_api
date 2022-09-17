@@ -28,11 +28,13 @@ pub const TAG: crate::Tag = crate::Tag {
 
 mod create;
 mod get;
+mod list;
 
 pub fn router() -> axum::Router {
     axum::Router::new()
         .merge(EndpointWrapper::new(get::GetUser))
         .merge(EndpointWrapper::new(create::CreateUser))
+        .merge(EndpointWrapper::new(list::ListUsers))
 }
 
 pub fn components(
@@ -40,6 +42,7 @@ pub fn components(
 ) -> utoipa::openapi::ComponentsBuilder {
     let builder = get::GetUser::components(builder);
     let builder = create::CreateUser::components(builder);
+    let builder = list::ListUsers::components(builder);
     builder.schema("User", <User as utoipa::ToSchema>::schema())
 }
 
@@ -53,14 +56,20 @@ pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBu
             crate::axum_path_str_to_openapi(create::CreateUser::PATH),
             create::CreateUser::path_item(),
         )
+        .path(
+            crate::axum_path_str_to_openapi(list::ListUsers::PATH),
+            list::ListUsers::path_item(),
+        )
 }
 
 // #[cfg(test)]
 pub mod testing {
-    pub const USER_01_ID: &str = "add83cdf-2ab3-443f-84dd-476d7984cf75";
-    pub const USER_02_ID: &str = "ce4fe993-04d6-462e-af1d-d734fcc9639d";
-    pub const USER_03_ID: &str = "d437e73f-4610-462c-ab22-f94b76bba83a";
-    pub const USER_04_ID: &str = "68cf4d43-62d2-4202-8c50-c79a5f4dd1cc";
+    use deps::*;
+
+    pub const USER_01_ID: uuid::Uuid = uuid::uuid!("add83cdf-2ab3-443f-84dd-476d7984cf75");
+    pub const USER_02_ID: uuid::Uuid = uuid::uuid!("ce4fe993-04d6-462e-af1d-d734fcc9639d");
+    pub const USER_03_ID: uuid::Uuid = uuid::uuid!("d437e73f-4610-462c-ab22-f94b76bba83a");
+    pub const USER_04_ID: uuid::Uuid = uuid::uuid!("68cf4d43-62d2-4202-8c50-c79a5f4dd1cc");
 
     pub const USER_01_USERNAME: &str = "sabrina";
     pub const USER_02_USERNAME: &str = "archie";

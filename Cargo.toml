@@ -1,11 +1,17 @@
 [package]
 name = "template_rust_web_api"
-description = "Opinion template repository for an HTTP API."
+description = "Opinionated template repository for an HTTP API."
 version = "0.1.0"
 edition = "2021"
+default-run = "web"
 
 [[bin]]
 name = "web"
+test = false
+bench = false
+
+[[bin]]
+name = "print_oas"
 test = false
 bench = false
 

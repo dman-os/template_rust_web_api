@@ -199,8 +199,6 @@ mod tests {
     use crate::utils::testing::*;
     use crate::{auth::*, Endpoint};
 
-    use axum::http;
-
     fn fixture_request() -> Request {
         serde_json::from_value(fixture_request_json()).unwrap()
     }
@@ -296,8 +294,7 @@ mod tests {
                     let resp_body_json = response_json.unwrap();
                     // TODO: use super user token
                     let token = authenticate::Authenticate.handle(&ctx.ctx(), authenticate::Request{
-                        username: Some(req_body_json["username"].as_str().unwrap().into()),
-                        email: None,
+                        identifier: req_body_json["username"].as_str().unwrap().into(),
                         password: req_body_json["password"].as_str().unwrap().into()
                     }).await.unwrap_or_log().token;
 
