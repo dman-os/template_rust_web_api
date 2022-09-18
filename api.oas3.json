@@ -64,7 +64,7 @@
                   }
                 },
                 "example": {
-                  "expiresAt": 1663427772,
+                  "expiresAt": 1663514741,
                   "token": "mcpqwen8y3489nc8y2pf",
                   "userId": "00000000-0000-0000-0000-000000000000"
                 }
@@ -145,19 +145,19 @@
                   "cursor": null,
                   "items": [
                     {
-                      "createdAt": 1663427772,
+                      "createdAt": 1663514741,
                       "email": "hex.queen@teen.dj",
                       "id": "00000000-0000-0000-0000-000000000000",
                       "picUrl": "https:://example.com/picture.jpg",
-                      "updatedAt": 1663427772,
+                      "updatedAt": 1663514741,
                       "username": "sabrina"
                     },
                     {
-                      "createdAt": 1663427772,
+                      "createdAt": 1663514741,
                       "email": "archie1941@poetry.ybn",
                       "id": "00000000-0000-0000-0000-000000000000",
                       "picUrl": null,
-                      "updatedAt": 1663427772,
+                      "updatedAt": 1663514741,
                       "username": "archie"
                     }
                   ]
@@ -267,11 +267,11 @@
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663427772,
+                  "createdAt": 1663514741,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663427772,
+                  "updatedAt": 1663514741,
                   "username": "sabrina"
                 }
               }
@@ -346,11 +346,11 @@
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663427772,
+                  "createdAt": 1663514741,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663427772,
+                  "updatedAt": 1663514741,
                   "username": "sabrina"
                 }
               }
@@ -389,6 +389,140 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GetUserError"
+                },
+                "example": {
+                  "error": "internal",
+                  "message": "internal server error"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "bearer": [
+              ""
+            ]
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "user"
+        ],
+        "summary": "Create a new User resource.",
+        "operationId": "UpdateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "picUrl": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success updating User",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                },
+                "example": {
+                  "createdAt": 1663514741,
+                  "email": "hex.queen@teen.dj",
+                  "id": "00000000-0000-0000-0000-000000000000",
+                  "picUrl": "https:://example.com/picture.jpg",
+                  "updatedAt": 1663514741,
+                  "username": "sabrina"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateUserError"
+                },
+                "example": {
+                  "error": "invalidInput",
+                  "issues": {
+                    "email": [
+                      {
+                        "code": "email",
+                        "message": null,
+                        "params": {
+                          "value": "bad.email.com"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateUserError"
+                },
+                "example": {
+                  "error": "accessDenied"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateUserError"
+                },
+                "example": {
+                  "error": "notFound",
+                  "id": "00000000-0000-0000-0000-000000000000"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateUserError"
                 },
                 "example": {
                   "error": "internal",
@@ -590,6 +724,115 @@
                 "type": "string",
                 "enum": [
                   "accessDenied"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "issues",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "invalidInput"
+                ]
+              },
+              "issues": {
+                "$ref": "#/components/schemas/ValidationErrors"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UpdateUserError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "notFound"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "accessDenied"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "username",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "usernameOccupied"
+                ]
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "email",
+              "error"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string",
+                "enum": [
+                  "emailOccupied"
                 ]
               }
             }

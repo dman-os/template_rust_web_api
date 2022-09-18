@@ -11,8 +11,8 @@ pub struct GetUser;
 
 #[derive(Debug)]
 pub struct Request {
-    auth_token: std::sync::Arc<str>,
-    id: uuid::Uuid,
+    pub auth_token: std::sync::Arc<str>,
+    pub id: uuid::Uuid,
 }
 
 #[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
@@ -191,6 +191,14 @@ mod tests {
                 "id": USER_01_ID,
                 "username": USER_01_USERNAME,
                 "email": USER_01_EMAIL,
+            }),
+        },
+        fails_if_not_found: {
+            uri: format!("/users/{}", uuid::Uuid::new_v4()),
+            auth_token: USER_01_SESSION.into(), // FIXME: use super user session
+            status: StatusCode::NOT_FOUND,
+            check_json: serde_json::json!({
+                "error": "notFound",
             }),
         },
     }

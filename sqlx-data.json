@@ -172,6 +172,60 @@
     },
     "query": "\nSELECT\n    id as \"id!\",\n    created_at as \"created_at!\",\n    updated_at as \"updated_at!\",\n    email::TEXT as \"email!\",\n    username::TEXT as \"username!\",\n    pic_url\nFROM create_user($1::TEXT::CITEXT, $2::TEXT::CITEXT, $3)\n                "
   },
+  "b63a0b7e2e5f44cfed8506ff08bd572f8b93d56e3db92b295beecc6355810587": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id!",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "created_at!",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "updated_at!",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "email!",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "username!",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "pic_url",
+          "ordinal": 5,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "\nSELECT\n    id as \"id!\",\n    created_at as \"created_at!\",\n    updated_at as \"updated_at!\",\n    email::TEXT as \"email!\",\n    username::TEXT as \"username!\",\n    pic_url\nFROM update_user(\n    $1,\n    $2::TEXT::CITEXT, \n    $3::TEXT::CITEXT, \n    $4,\n    $5\n)\n                "
+  },
   "fa949c2348fddf0672d9733365722080db0048ec1bce4361569f12ef55721dcb": {
     "describe": {
       "columns": [],

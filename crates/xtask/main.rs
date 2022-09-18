@@ -64,6 +64,13 @@ fn main() -> Result<(), AnyErr> {
         }
         Commands::PreCommit {} => {
             assert!(
+                show_cmd(cargo_cmd().args(&["fmt",]))
+                    .status()
+                    .unwrap()
+                    .success(),
+                "failed to cargo fmt"
+            );
+            assert!(
                 show_cmd(cargo_cmd().args(&["sqlx", "prepare", "--", "--lib",]))
                     .status()
                     .unwrap()

@@ -14,7 +14,7 @@ CREATE TABLE sessions_delted (
 ) INHERITS (__sessions_core);
 
 CREATE TRIGGER maintain_updated_at_sessions
-    AFTER UPDATE
+    BEFORE UPDATE
     ON sessions
     FOR EACH ROW
     EXECUTE PROCEDURE maintain_updated_at();

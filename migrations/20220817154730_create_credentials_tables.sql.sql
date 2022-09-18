@@ -13,7 +13,7 @@ CREATE TABLE credentials_delted (
 ) INHERITS (__credentials_core);
 
 CREATE TRIGGER maintain_updated_at_credentials
-    AFTER UPDATE
+    BEFORE UPDATE
     ON credentials
     FOR EACH ROW
     EXECUTE PROCEDURE maintain_updated_at();

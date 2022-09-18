@@ -526,6 +526,21 @@ where
     }
 }
 
+impl<T1, T2, T3> DocumentedParameter for (T1, T2, T3)
+where
+    T1: DocumentedParameter,
+    T2: DocumentedParameter,
+    T3: DocumentedParameter,
+{
+    const HAS_BEARER: bool = T1::HAS_BEARER | T2::HAS_BEARER | T3::HAS_BEARER;
+    fn to_openapi(op_id: &str, path: &str) -> Vec<ParameterDoc> {
+        let mut vec = T1::to_openapi(op_id, path);
+        vec.append(&mut T2::to_openapi(op_id, path));
+        vec.append(&mut T3::to_openapi(op_id, path));
+        vec
+    }
+}
+
 pub trait DocumentedEndpoint: HttpEndpoint + Sized
 where
     Self::Response: ToRefOrSchema + serde::Serialize,

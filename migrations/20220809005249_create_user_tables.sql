@@ -17,7 +17,7 @@ CREATE TABLE users_deleted (
 ) INHERITS (__users_core);
 
 CREATE TRIGGER maintain_updated_at_users
-    AFTER UPDATE
+    BEFORE UPDATE
     ON users
     FOR EACH ROW
     EXECUTE PROCEDURE maintain_updated_at();

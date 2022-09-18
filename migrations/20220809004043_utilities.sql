@@ -8,11 +8,11 @@ create table __common(
     -- deleted_at  TIMESTAMPTZ NOT NULL    DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE OR REPLACE FUNCTION maintain_updated_at()
+CREATE FUNCTION maintain_updated_at()
 RETURNS TRIGGER
 AS $body$
     BEGIN
-        NEW.updated_at = now();
+        NEW.updated_at := CURRENT_TIMESTAMP;
         RETURN NEW;
     END;
 $body$ LANGUAGE PLpgSQL;

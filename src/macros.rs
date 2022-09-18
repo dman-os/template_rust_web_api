@@ -326,6 +326,11 @@ macro_rules! integration_table_tests {
                             serde_json::from_slice(&body).ok()
                         );
 
+                    let print_response: Option<bool> = $crate::optional_expr!($($print_res)?);
+                    if let Some(true) = print_response {
+                        tracing::info!(head = ?head, "reponse_json: {:#?}", response_json);
+                    }
+
                     let status_code = $status;
                     assert_eq!(
                         head.status,
@@ -340,11 +345,6 @@ macro_rules! integration_table_tests {
                             ("check", &check_json),
                             ("response", &response_json)
                         );
-                    }
-
-                    let print_response: Option<bool> = $crate::optional_expr!($($print_res)?);
-                    if let Some(true) = print_response {
-                        tracing::info!(head = ?head, "reponse_json: {:#?}", response_json);
                     }
 
                     use $crate::utils::testing::{ExtraAssertions, EAArgs};

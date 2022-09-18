@@ -29,11 +29,13 @@ pub const TAG: crate::Tag = crate::Tag {
 mod create;
 mod get;
 mod list;
+mod update;
 
 pub fn router() -> axum::Router {
     axum::Router::new()
         .merge(EndpointWrapper::new(get::GetUser))
         .merge(EndpointWrapper::new(create::CreateUser))
+        .merge(EndpointWrapper::new(update::UpdateUser))
         .merge(EndpointWrapper::new(list::ListUsers))
 }
 
@@ -42,6 +44,7 @@ pub fn components(
 ) -> utoipa::openapi::ComponentsBuilder {
     let builder = get::GetUser::components(builder);
     let builder = create::CreateUser::components(builder);
+    let builder = update::UpdateUser::components(builder);
     let builder = list::ListUsers::components(builder);
     builder.schema("User", <User as utoipa::ToSchema>::schema())
 }
@@ -51,6 +54,10 @@ pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBu
         .path(
             crate::axum_path_str_to_openapi(get::GetUser::PATH),
             get::GetUser::path_item(),
+        )
+        .path(
+            crate::axum_path_str_to_openapi(update::UpdateUser::PATH),
+            update::UpdateUser::path_item(),
         )
         .path(
             crate::axum_path_str_to_openapi(create::CreateUser::PATH),
