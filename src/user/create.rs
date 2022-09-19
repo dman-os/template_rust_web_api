@@ -12,7 +12,7 @@ pub struct CreateUser;
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub struct Request {
-    #[validate(length(min = 5))]
+    #[validate(length(min = 5, max = 25), regex(path = "crate::user::USERNAME_REGEX"))]
     pub username: String,
     #[validate(email)]
     pub email: String,
@@ -128,21 +128,17 @@ impl HttpEndpoint for CreateUser {
 
 impl DocumentedEndpoint for CreateUser {
     const TAG: &'static Tag = &super::TAG;
-    const SUMMARY: &'static str = "Create a new User resource.";
-    const SUCCESS_DESCRIPTION: &'static str = "Success creating a User object";
 
     fn success_examples() -> Vec<serde_json::Value> {
         use crate::user::testing::*;
-        [
-            super::User {
-                id: Default::default(),
-                created_at: time::OffsetDateTime::now_utc(),
-                updated_at: time::OffsetDateTime::now_utc(),
-                email: USER_01_EMAIL.into(),
-                username: USER_01_USERNAME.into(),
-                pic_url: Some("https:://example.com/picture.jpg".into()),
-            }
-        ]
+        [super::User {
+            id: Default::default(),
+            created_at: time::OffsetDateTime::now_utc(),
+            updated_at: time::OffsetDateTime::now_utc(),
+            email: USER_01_EMAIL.into(),
+            username: USER_01_USERNAME.into(),
+            pic_url: Some("https:://example.com/picture.jpg".into()),
+        }]
         .into_iter()
         .map(serde_json::to_value)
         .collect::<Result<_, _>>()
@@ -212,7 +208,7 @@ mod tests {
 
     fn fixture_request_json() -> serde_json::Value {
         serde_json::json!({
-            "username": "whish_box",
+            "username": "whish_box12",
             "email": "multis@cream.mux",
             "password": "lovebite",
         })
@@ -239,9 +235,51 @@ mod tests {
     }
 
     create_user_validate! {
-        rejects_too_short_usernames: (
+        rejects_too_long_usernames: (
             Request {
                 username: "shrt".into(),
+                ..fixture_request()
+            },
+            Some("username"),
+        ),
+        rejects_too_short_usernames: (
+            Request {
+                username: "man-the-manly-man-ende-man-be-man-eske-man123".into(),
+                ..fixture_request()
+            },
+            Some("username"),
+        ),
+        rejects_usernames_that_ends_with_dashes: (
+            Request {
+                username: "wrenz-".into(),
+                ..fixture_request()
+            },
+            Some("username"),
+        ),
+        rejects_usernames_that_start_with_dashes: (
+            Request {
+                username: "-wrenz".into(),
+                ..fixture_request()
+            },
+            Some("username"),
+        ),
+        rejects_usernames_that_ends_with_underscore: (
+            Request {
+                username: "belle_".into(),
+                ..fixture_request()
+            },
+            Some("username"),
+        ),
+        rejects_usernames_that_start_with_underscore: (
+            Request {
+                username: "_belle".into(),
+                ..fixture_request()
+            },
+            Some("username"),
+        ),
+        rejects_usernames_with_white_space: (
+            Request {
+                username: "daddy yo".into(),
                 ..fixture_request()
             },
             Some("username"),

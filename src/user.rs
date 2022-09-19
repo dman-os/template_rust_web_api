@@ -2,6 +2,8 @@ use deps::*;
 
 use crate::{DocumentedEndpoint, EndpointWrapper, HttpEndpoint};
 
+use once_cell::sync::Lazy;
+
 #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub struct User {
@@ -22,6 +24,9 @@ pub struct User {
 }
 
 pub use list::UserSortingField;
+
+pub static USERNAME_REGEX: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9]+([_-]?[a-zA-Z0-9])*$").unwrap());
 
 pub const TAG: crate::Tag = crate::Tag {
     name: "user",

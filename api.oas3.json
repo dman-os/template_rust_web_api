@@ -11,7 +11,6 @@
         "tags": [
           "auth"
         ],
-        "summary": "Create a new User resource.",
         "operationId": "Authenticate",
         "parameters": [],
         "requestBody": {
@@ -37,7 +36,7 @@
         },
         "responses": {
           "200": {
-            "description": "Success authenticating.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -64,7 +63,7 @@
                   }
                 },
                 "example": {
-                  "expiresAt": 1663516381,
+                  "expiresAt": 1663609269,
                   "token": "mcpqwen8y3489nc8y2pf",
                   "userId": "00000000-0000-0000-0000-000000000000"
                 }
@@ -107,57 +106,42 @@
         "tags": [
           "user"
         ],
-        "summary": "List the User objects.",
         "operationId": "ListUsers",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserSortingField>"
+                "$ref": "#/components/schemas/ListUsersRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Success getting Users",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "items"
-                  ],
-                  "properties": {
-                    "cursor": {
-                      "type": "string"
-                    },
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/T"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ListUsersResponse"
                 },
                 "example": {
                   "cursor": null,
                   "items": [
                     {
-                      "createdAt": 1663516381,
+                      "createdAt": 1663609269,
                       "email": "hex.queen@teen.dj",
                       "id": "00000000-0000-0000-0000-000000000000",
                       "picUrl": "https:://example.com/picture.jpg",
-                      "updatedAt": 1663516381,
+                      "updatedAt": 1663609269,
                       "username": "sabrina"
                     },
                     {
-                      "createdAt": 1663516381,
+                      "createdAt": 1663609269,
                       "email": "archie1941@poetry.ybn",
                       "id": "00000000-0000-0000-0000-000000000000",
                       "picUrl": null,
-                      "updatedAt": 1663516381,
+                      "updatedAt": 1663609269,
                       "username": "archie"
                     }
                   ]
@@ -230,7 +214,6 @@
         "tags": [
           "user"
         ],
-        "summary": "Create a new User resource.",
         "operationId": "CreateUser",
         "parameters": [],
         "requestBody": {
@@ -260,18 +243,18 @@
         },
         "responses": {
           "201": {
-            "description": "Success creating a User object",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663516381,
+                  "createdAt": 1663609269,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663516381,
+                  "updatedAt": 1663609269,
                   "username": "sabrina"
                 }
               }
@@ -324,7 +307,6 @@
         "tags": [
           "user"
         ],
-        "summary": "Get the User at the given id",
         "operationId": "GetUser",
         "parameters": [
           {
@@ -339,18 +321,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Success getting User",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663516381,
+                  "createdAt": 1663609269,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663516381,
+                  "updatedAt": 1663609269,
                   "username": "sabrina"
                 }
               }
@@ -407,11 +389,67 @@
           }
         ]
       },
+      "delete": {
+        "tags": [
+          "user"
+        ],
+        "operationId": "DeleteUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteUserError"
+                },
+                "example": {
+                  "error": "accessDenied"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteUserError"
+                },
+                "example": {
+                  "error": "internal",
+                  "message": "internal server error"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "bearer": [
+              ""
+            ]
+          }
+        ]
+      },
       "patch": {
         "tags": [
           "user"
         ],
-        "summary": "Create a new User resource.",
         "operationId": "UpdateUser",
         "parameters": [
           {
@@ -449,18 +487,18 @@
         },
         "responses": {
           "200": {
-            "description": "Success updating User",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663516381,
+                  "createdAt": 1663609269,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663516381,
+                  "updatedAt": 1663609269,
                   "username": "sabrina"
                 }
               }
@@ -657,6 +695,42 @@
           }
         ]
       },
+      "DeleteUserError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "accessDenied"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
       "GetUserError": {
         "oneOf": [
           {
@@ -788,6 +862,30 @@
             "$ref": "#/components/schemas/SortingOrder"
           }
         }
+      },
+      "ListUsersResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        }
+      },
+      "SortingOrder": {
+        "type": "string",
+        "enum": [
+          "ascending",
+          "descending"
+        ]
       },
       "UpdateUserError": {
         "oneOf": [
@@ -937,7 +1035,7 @@
           }
         }
       },
-      "UserSortingList": {
+      "UserSortingField": {
         "type": "string",
         "enum": [
           "username",

@@ -1,4 +1,3 @@
-
 /// TODO: DRY me up
 #[macro_export]
 macro_rules! alias_and_ref {
@@ -86,7 +85,6 @@ macro_rules! alias_and_ref {
         }
     };
 }
-
 
 /// Implement [`From`] [`crate::auth::authorize::Error`] for the provided type
 /// This expects the standard unit `AccessDenied` and the struct `Internal`

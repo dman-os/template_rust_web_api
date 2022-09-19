@@ -551,6 +551,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "rand",
  "redis",
+ "regex",
  "rust-argon2",
  "serde",
  "serde_json",

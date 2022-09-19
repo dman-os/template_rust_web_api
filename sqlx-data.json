@@ -1,5 +1,25 @@
 {
   "db": "PostgreSQL",
+  "1022e68d6d0f75b02c9c5f8b264a64917ae05d5c70706e52256df7e57be4862c": {
+    "describe": {
+      "columns": [
+        {
+          "name": "delete_user",
+          "ordinal": 0,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        null
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\nSELECT delete_user($1)\n            "
+  },
   "491a26f29d3b8914eca63de98656197ed0467220990278619a117bcef5c7195c": {
     "describe": {
       "columns": [

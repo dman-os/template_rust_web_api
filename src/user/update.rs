@@ -16,7 +16,7 @@ pub struct Request {
     auth_token: Option<std::sync::Arc<str>>,
     #[serde(skip)]
     user_id: Option<uuid::Uuid>,
-    #[validate(length(min = 5))]
+    #[validate(length(min = 5, max = 25), regex(path = "crate::user::USERNAME_REGEX"))]
     pub username: Option<String>,
     #[validate(email)]
     pub email: Option<String>,
@@ -200,16 +200,14 @@ impl DocumentedEndpoint for UpdateUser {
 
     fn success_examples() -> Vec<serde_json::Value> {
         use crate::user::testing::*;
-        [
-            super::User {
-                id: Default::default(),
-                created_at: time::OffsetDateTime::now_utc(),
-                updated_at: time::OffsetDateTime::now_utc(),
-                email: USER_01_EMAIL.into(),
-                username: USER_01_USERNAME.into(),
-                pic_url: Some("https:://example.com/picture.jpg".into()),
-            }
-        ]
+        [super::User {
+            id: Default::default(),
+            created_at: time::OffsetDateTime::now_utc(),
+            updated_at: time::OffsetDateTime::now_utc(),
+            email: USER_01_EMAIL.into(),
+            username: USER_01_USERNAME.into(),
+            pic_url: Some("https:://example.com/picture.jpg".into()),
+        }]
         .into_iter()
         .map(serde_json::to_value)
         .collect::<Result<_, _>>()
@@ -327,6 +325,13 @@ mod tests {
         rejects_too_short_usernames: (
             Request {
                 username: Some("shrt".into()),
+                ..fixture_request_empty()
+            },
+            Some("username"),
+        ),
+        rejects_usernames_with_white_space: (
+            Request {
+                username: Some("daddy yo".into()),
                 ..fixture_request_empty()
             },
             Some("username"),

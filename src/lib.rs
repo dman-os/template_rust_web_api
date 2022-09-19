@@ -622,7 +622,7 @@ where
             };
 
             let builder = if !Self::SUCCESS_DESCRIPTION.is_empty() {
-                builder.description(dbg!(Self::SUCCESS_DESCRIPTION))
+                builder.description(Self::SUCCESS_DESCRIPTION)
             } else {
                 builder
             };
