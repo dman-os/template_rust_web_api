@@ -107,26 +107,35 @@ impl HttpEndpoint for Authenticate {
     const METHOD: Method = Method::Post;
     const PATH: &'static str = "/authenticate";
 
-    type Parameters = (Json<Request>,);
+    type HttpRequest = (Json<Request>,);
 
-    fn request((Json(req),): Self::Parameters) -> Result<Self::Request, Self::Error> {
+    fn request((Json(req),): Self::HttpRequest) -> Result<Self::Request, Self::Error> {
         Ok(req)
+    }
+
+
+    fn response(resp: Self::Response) -> axum::response::Response {
+        Json(resp).into_response()
     }
 }
 
 impl DocumentedEndpoint for Authenticate {
     const TAG: &'static Tag = &super::TAG;
     const SUMMARY: &'static str = "Create a new User resource.";
+    const SUCCESS_DESCRIPTION: &'static str =             "Success authenticating.";
 
-    fn successs() -> SuccessResponse<Self::Response> {
-        (
-            "Success authenticating.",
+    fn success_examples() -> Vec<serde_json::Value> {
+        [
             Self::Response {
                 user_id: Default::default(),
                 token: "mcpqwen8y3489nc8y2pf".into(),
                 expires_at: time::OffsetDateTime::now_utc(),
             },
-        )
+        ]
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .unwrap()
     }
 
     fn errors() -> Vec<ErrorResponse<Self::Error>> {

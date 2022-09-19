@@ -7,21 +7,19 @@ mod validation_errs;
 #[cfg(test)]
 pub mod testing;
 
-pub trait TypeNameRaw {
-    fn type_name_raw() -> &'static str {
-        let name = std::any::type_name::<Self>();
-        match &name.rfind(':') {
-            Some(pos) => &name[pos + 1..name.len()],
-            None => name,
-        }
+/// This baby doesn't work on generic types
+pub fn type_name_raw<T>() -> &'static str {
+    let name = std::any::type_name::<T>();
+    match &name.rfind(':') {
+        Some(pos) => &name[pos + 1..name.len()],
+        None => name,
     }
 }
-impl<T> TypeNameRaw for T {}
 
 #[test]
 fn test_type_name_macro() {
     struct Foo {}
-    assert_eq!("Foo", Foo::type_name_raw());
+    assert_eq!("Foo", type_name_raw::<Foo>());
 }
 
 /*

@@ -178,10 +178,10 @@ impl HttpEndpoint for UpdateUser {
     const METHOD: Method = Method::Patch;
     const PATH: &'static str = "/users/:id";
 
-    type Parameters = (BearerToken, Path<uuid::Uuid>, Json<Request>);
+    type HttpRequest = (BearerToken, Path<uuid::Uuid>, Json<Request>);
 
     fn request(
-        (BearerToken(token), Path(user_id), Json(req)): Self::Parameters,
+        (BearerToken(token), Path(user_id), Json(req)): Self::HttpRequest,
     ) -> Result<Self::Request, Self::Error> {
         Ok(Request {
             auth_token: Some(token),
@@ -189,17 +189,18 @@ impl HttpEndpoint for UpdateUser {
             ..req
         })
     }
+
+    fn response(Ref(resp): Self::Response) -> axum::response::Response {
+        Json(resp).into_response()
+    }
 }
 
 impl DocumentedEndpoint for UpdateUser {
     const TAG: &'static Tag = &super::TAG;
 
-    const SUMMARY: &'static str = "Create a new User resource.";
-
-    fn successs() -> SuccessResponse<Self::Response> {
+    fn success_examples() -> Vec<serde_json::Value> {
         use crate::user::testing::*;
-        (
-            "Success updating User",
+        [
             super::User {
                 id: Default::default(),
                 created_at: time::OffsetDateTime::now_utc(),
@@ -208,8 +209,11 @@ impl DocumentedEndpoint for UpdateUser {
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
             }
-            .into(),
-        )
+        ]
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .unwrap()
     }
 
     fn errors() -> Vec<ErrorResponse<Self::Error>> {

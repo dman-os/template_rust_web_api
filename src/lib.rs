@@ -84,15 +84,19 @@ Notes:
                 let builder = openapi::ComponentsBuilder::new();
                 let builder = builder
                     .schema(
-                        "ValidationErrors",
+                        type_name_raw::<SortingOrder>(),
+                        <SortingOrder as utoipa::ToSchema>::schema(),
+                    )
+                    .schema(
+                        type_name_raw::<ValidationErrors>(),
                         <utils::ValidationErrors as utoipa::ToSchema>::schema(),
                     )
                     .schema(
-                        "ValidationErrorsKind",
+                        type_name_raw::<ValidationErrorsKind>(),
                         <utils::ValidationErrorsKind as utoipa::ToSchema>::schema(),
                     )
                     .schema(
-                        "ValidationError",
+                        type_name_raw::<ValidationError>(),
                         <utils::ValidationError as utoipa::ToSchema>::schema(),
                     );
                 let builder = user::components(builder);
@@ -178,22 +182,19 @@ where
 
 pub trait HttpEndpoint: Endpoint + Clone
 where
-    Self::Response: serde::Serialize,
     Self::Error: serde::Serialize,
     for<'a> &'a Self::Error: Into<StatusCode>,
 {
     const METHOD: Method;
     const PATH: &'static str;
+    type HttpRequest: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static;
+    // FIXME: this is superflous and can be covered by the `response` call
     const SUCCESS_CODE: StatusCode = StatusCode::OK;
-    type Parameters: axum::extract::FromRequest<axum::body::Body> + Send + Sync + 'static;
-    // type HttpResponse: axum::response::IntoResponse = axum::Json<Self::Response>;
+    // type HttpResponse: axum::response::IntoResponse;
 
-    /// TODO: consider making this a `From` trait bound on `Self::Error`
-    fn request(params: Self::Parameters) -> Result<Self::Request, Self::Error>;
-
-    fn into_http_response(resp: Self::Response) -> axum::response::Response {
-        (Self::SUCCESS_CODE, response::Json(resp)).into_response()
-    }
+    /// TODO: consider making this a `From` trait bound on `Self::Parameters`
+    fn request(params: Self::HttpRequest) -> Result<Self::Request, Self::Error>;
+    fn response(resp: Self::Response) -> axum::response::Response;
 
     /// This actally need not be a method but I guess it allows for easy behavior
     /// modification. We ought to probably move these to the `Handler` impl
@@ -205,7 +206,7 @@ where
         let this = self.clone();
         Box::pin(async move {
             let mut req_parts = axum::extract::RequestParts::new(req);
-            let req = match Self::Parameters::from_request(&mut req_parts).await {
+            let req = match Self::HttpRequest::from_request(&mut req_parts).await {
                 Ok(val) => val,
                 Err(err) => return err.into_response(),
             };
@@ -222,18 +223,17 @@ where
                 };
             // we have to clone it or the borrow checker biches that &T is
             match this.handle(&ctx, req).await {
-                Ok(ok) => Self::into_http_response(ok),
+                // Ok(ok) => Into::<Self::HttpResponse>::into(ok).into_response(),
+                Ok(ok) => {
+                    let mut resp = Self::response(ok);
+                    *resp.status_mut() = Self::SUCCESS_CODE;
+                    resp
+                }
                 Err(err) => (Into::<StatusCode>::into(&err), response::Json(err)).into_response(),
             }
         })
     }
 }
-
-/// (statuscode, description, example)
-pub type SuccessResponse<Res> = (&'static str, Res);
-/// (description, example)
-pub type ErrorResponse<Err> = (&'static str, Err);
-
 pub struct Tag {
     name: &'static str,
     desc: &'static str,
@@ -319,14 +319,32 @@ where
     }
 
     fn schema_name() -> &'static str {
-        T::type_name_raw()
+        type_name_raw::<T>()
+    }
+}
+
+pub struct NoContent;
+
+impl From<()> for NoContent {
+    fn from(_: ()) -> Self {
+        Self
+    }
+}
+
+impl ToRefOrSchema for NoContent {
+    fn schema_name() -> &'static str {
+        type_name_raw::<NoContent>()
+    }
+
+    fn ref_or_schema() -> openapi::schema::RefOr<openapi::schema::Schema> {
+        panic!("this baby is special cased")
     }
 }
 
 #[derive(educe::Educe, serde::Serialize, serde::Deserialize)]
 #[serde(crate = "serde")]
 #[educe(Deref, DerefMut)]
-pub struct Ref<T>(T);
+pub struct Ref<T>(pub T);
 
 impl<T> From<T> for Ref<T> {
     fn from(inner: T) -> Self {
@@ -339,7 +357,7 @@ where
     T: utoipa::ToSchema + serde::Serialize,
 {
     fn ref_or_schema() -> openapi::schema::RefOr<openapi::schema::Schema> {
-        openapi::schema::Ref::from_schema_name(T::type_name_raw()).into()
+        openapi::schema::Ref::from_schema_name(type_name_raw::<T>()).into()
         // utoipa::openapi::ObjectBuilder::new()
         //     .property(
         //         "$ref",
@@ -541,25 +559,119 @@ where
     }
 }
 
+/// (description, example)
+pub type ErrorResponse<Err> = (&'static str, Err);
+
 pub trait DocumentedEndpoint: HttpEndpoint + Sized
 where
-    Self::Response: ToRefOrSchema + serde::Serialize,
+    Self::Response: ToRefOrSchema,
     Self::Error: ToRefOrSchema + serde::Serialize,
     for<'a> &'a Self::Error: Into<StatusCode>,
-    Self::Parameters: DocumentedParameter,
+    Self::HttpRequest: DocumentedParameter,
 {
     const TAG: &'static Tag = &DEFAULT_TAG;
     const SUMMARY: &'static str = "";
     const DESCRIPTION: &'static str = "";
+    const SUCCESS_DESCRIPTION: &'static str = "";
     const DEPRECATED: bool = false;
 
-    fn successs() -> SuccessResponse<Self::Response>;
+    /// By default, this calls [`utils::type_name_raw`] on `Self`.
+    fn id() -> &'static str {
+        type_name_raw::<Self>()
+    }
 
+    /// Provide examples to be used for the error responses
+    /// generated by [`error_responses`]. Each example will
+    /// be treated as a separate response keyed under the result
+    /// of calling [`Into`] [`StatusCode`] on it. This is optimized
+    /// for the enum error design.
     fn errors() -> Vec<ErrorResponse<Self::Error>>;
 
-    fn path_item() -> openapi::PathItem {
-        let id = <Self as TypeNameRaw>::type_name_raw();
-        let (params, bodies) = Self::Parameters::to_openapi(id, Self::PATH)
+    /// Provide examples to be used for the success response
+    /// generated by [`success_responses`]. These examples will
+    /// be used for a single Response object keyed under [`HttpEndpoint::SUCCESS_CODE`]
+    fn success_examples() -> Vec<serde_json::Value> {
+        vec![]
+    }
+
+    /// Read at `success_examples` for the default behavior.
+    fn success_responses() -> Vec<(String, openapi::Response)> {
+        vec![(Self::SUCCESS_CODE.as_u16().to_string(), {
+            let builder = if Self::Response::schema_name() != type_name_raw::<NoContent>() {
+                openapi::ResponseBuilder::new().content("application/json", {
+                    let mut schema = match Self::Response::ref_or_schema() {
+                        // if it's a `Ref`, use the `schema_name`
+                        openapi::schema::RefOr::Ref(_) => openapi::ContentBuilder::new()
+                            .schema(openapi::Ref::from_schema_name(Self::Response::schema_name())),
+                        // else, assume generic name
+                        openapi::schema::RefOr::T(schema) => {
+                            openapi::ContentBuilder::new()
+                                // .schema(utoipa::openapi::Ref::from_schema_name(
+                                //     format!("{id}Response"),
+                                // ))
+                                .schema(schema)
+                        }
+                    };
+                    for example in Self::success_examples() {
+                        schema = schema.example(Some(serde_json::to_value(example).unwrap()))
+                    }
+                    schema.build()
+                })
+            } else {
+                openapi::ResponseBuilder::new()
+            };
+
+            let builder = if !Self::SUCCESS_DESCRIPTION.is_empty() {
+                builder.description(dbg!(Self::SUCCESS_DESCRIPTION))
+            } else {
+                builder
+            };
+            builder.build()
+        })]
+    }
+
+    /// Besides what's stated in the doc of [`errors`], the default impl assumes that
+    /// the `Error` type schema is registered as a component under `EndpointIdError`
+    /// endpoint id coming from [`DocumentedEndpoint::id`]
+    fn error_responses() -> Vec<(String, openapi::Response)> {
+        let id = Self::id();
+        Self::errors()
+            .into_iter()
+            .map(|(desc, example)| {
+                (
+                    Into::<StatusCode>::into(&example).as_u16().to_string(),
+                    openapi::ResponseBuilder::new()
+                        .description(desc)
+                        .content(
+                            "application/json",
+                            openapi::ContentBuilder::new()
+                                .schema(utoipa::openapi::Ref::from_schema_name(format!(
+                                    "{id}Error"
+                                )))
+                                // .schema(Self::Error::ref_or_schema())
+                                .example(Some(serde_json::to_value(example).unwrap()))
+                                .build(),
+                        )
+                        .build(),
+                )
+            })
+            .collect()
+    }
+
+    /// Makes use of [`success_responses`] and [`default_responses`].
+    fn responses() -> openapi::Responses {
+        let builder = openapi::ResponsesBuilder::new();
+        let builder = builder.responses_from_iter(Self::success_responses().into_iter());
+        let builder = builder.responses_from_iter(Self::error_responses().into_iter());
+        builder.build()
+    }
+
+    fn paramters() -> (
+        Option<openapi::request_body::RequestBody>,
+        Vec<openapi::path::Parameter>,
+    ) {
+        let id = Self::id();
+        let (params, bodies) = Self::HttpRequest::to_openapi(id, Self::PATH)
             .into_iter()
             .fold((vec![], vec![]), |(mut params, mut bodies), doc| {
                 match doc {
@@ -573,6 +685,12 @@ where
                 (params, bodies)
             });
         assert!(bodies.len() < 2, "{id} has more than one Body ParameterDoc");
+        (bodies.into_iter().next(), params)
+    }
+
+    fn path_item() -> openapi::PathItem {
+        let id = Self::id();
+        let (body, params) = Self::paramters();
         openapi::PathItem::new(
             Self::METHOD,
             openapi::path::OperationBuilder::new()
@@ -593,7 +711,7 @@ where
                     None
                 })
                 .tag(Self::TAG.name)
-                .securities(if Self::Parameters::HAS_BEARER {
+                .securities(if Self::HttpRequest::HAS_BEARER {
                     Some([openapi::security::SecurityRequirement::new::<
                         &str,
                         [&str; 1usize],
@@ -602,80 +720,16 @@ where
                 } else {
                     None
                 })
-                .request_body(bodies.into_iter().next())
-                .parameters(Some({
-                    params
-                    // [
-                    // utoipa::openapi::path::ParameterBuilder::new()
-                    //     .name("id")
-                    //     .parameter_in(utoipa::openapi::path::ParameterIn::Path)
-                    //     .required(utoipa::openapi::Required::True)
-                    //     .schema(Some(
-                    //         utoipa::openapi::ObjectBuilder::new()
-                    //             .schema_type(utoipa::openapi::SchemaType::String)
-                    //             .format(Some(utoipa::openapi::SchemaFormat::Uuid)),
-                    //     )),
-                    // ]
-                }))
-                .responses({
-                    let mut builder = openapi::ResponsesBuilder::new();
-                    {
-                        let (desc, resp) = &Self::successs();
-                        builder = builder.response(
-                            Self::SUCCESS_CODE.as_u16().to_string(),
-                            openapi::ResponseBuilder::new()
-                                .description(*desc)
-                                .content("application/json", {
-                                    match Self::Response::ref_or_schema() {
-                                        // if it's a `Ref`, use the `schema_name`
-                                        openapi::schema::RefOr::Ref(_) => {
-                                            openapi::ContentBuilder::new()
-                                                .schema(openapi::Ref::from_schema_name(
-                                                    Self::Response::schema_name(),
-                                                ))
-                                                .example(Some(serde_json::to_value(resp).unwrap()))
-                                                .build()
-                                        }
-                                        // else, assume generic name
-                                        openapi::schema::RefOr::T(schema) => {
-                                            openapi::ContentBuilder::new()
-                                                // .schema(utoipa::openapi::Ref::from_schema_name(
-                                                //     format!("{id}Response"),
-                                                // ))
-                                                .schema(schema)
-                                                .example(Some(serde_json::to_value(resp).unwrap()))
-                                                .build()
-                                        }
-                                    }
-                                })
-                                .build(),
-                        );
-                    }
-                    for (desc, err) in &Self::errors() {
-                        builder = builder.response(
-                            Into::<StatusCode>::into(err).as_u16().to_string(),
-                            openapi::ResponseBuilder::new()
-                                .description(*desc)
-                                .content(
-                                    "application/json",
-                                    openapi::ContentBuilder::new()
-                                        .schema(utoipa::openapi::Ref::from_schema_name(format!(
-                                            "{id}Error"
-                                        )))
-                                        // .schema(Self::Error::ref_or_schema())
-                                        .example(Some(serde_json::to_value(err).unwrap()))
-                                        .build(),
-                                )
-                                .build(),
-                        );
-                    }
-                    builder.build()
-                }),
+                .request_body(body)
+                .parameters(Some(params.into_iter()))
+                .responses(Self::responses()),
         )
     }
 
-    fn components(builder: openapi::ComponentsBuilder) -> openapi::ComponentsBuilder {
-        let id = <Self as TypeNameRaw>::type_name_raw();
+    /// Registers the [`Error`] type schema under `EndpointIdError` name using the
+    /// id provided at [`DocumentedEndpoint::id`]
+    fn default_components(builder: openapi::ComponentsBuilder) -> openapi::ComponentsBuilder {
+        let id = Self::id();
         // let (_, bodies) = Self::Parameters::to_openapi(id, Self::PATH)
         //     .into_iter()
         //     .fold((vec![], vec![]), |(mut params, mut bodies), doc| {
@@ -705,6 +759,10 @@ where
             utoipa::openapi::schema::RefOr::Ref(_) => builder,
             utoipa::openapi::schema::RefOr::T(schema) => builder.schema(name, schema),
         })
+    }
+
+    fn components(builder: openapi::ComponentsBuilder) -> openapi::ComponentsBuilder {
+        Self::default_components(builder)
     }
 }
 
@@ -742,7 +800,6 @@ pub struct EndpointWrapper<T> {
 impl<T> EndpointWrapper<T>
 where
     T: HttpEndpoint + Clone + Send + Sized + 'static,
-    T::Response: serde::Serialize,
     T::Error: serde::Serialize,
     for<'a> &'a T::Error: Into<StatusCode>,
 {
@@ -765,7 +822,6 @@ where
 impl<T> axum::handler::Handler<T::Request> for EndpointWrapper<T>
 where
     T: HttpEndpoint + Clone,
-    T::Response: serde::Serialize,
     T::Error: serde::Serialize,
     for<'a> &'a T::Error: Into<StatusCode>,
 {
@@ -779,7 +835,6 @@ where
 impl<T> From<EndpointWrapper<T>> for axum::Router
 where
     T: HttpEndpoint + Clone,
-    T::Response: serde::Serialize,
     T::Error: serde::Serialize,
     for<'a> &'a T::Error: Into<StatusCode>,
 {
@@ -804,10 +859,10 @@ impl<T> utoipa::Path for EndpointWrapper<T>
 where
     T: DocumentedEndpoint,
     T::Request: axum::extract::FromRequest<axum::body::Body>,
-    T::Response: utoipa::ToSchema + serde::Serialize,
+    T::Response: utoipa::ToSchema,
     T::Error: utoipa::ToSchema + serde::Serialize,
     for<'a> &'a T::Error: Into<StatusCode>,
-    T::Parameters: DocumentedParameter,
+    T::HttpRequest: DocumentedParameter,
 {
     fn path() -> &'static str {
         <T as HttpEndpoint>::PATH

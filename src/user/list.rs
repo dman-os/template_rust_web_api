@@ -1,14 +1,13 @@
 use deps::*;
 
 use axum::extract::*;
-use serde::{Deserialize, Serialize};
 
 use crate::utils::*;
 use crate::*;
 
 use super::User;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub enum UserSortingField {
     Username,
@@ -33,7 +32,7 @@ impl SortingField for UserSortingField {
 #[derive(Clone, Copy, Debug)]
 pub struct ListUsers;
 
-pub type Request = ListRequest<UserSortingField>;
+crate::alias_and_ref!(ListRequest<UserSortingField>, ListUsersRequest, Request, de);
 
 #[derive(Debug, thiserror::Error, serde::Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", tag = "error", rename_all = "camelCase")]
@@ -51,7 +50,7 @@ pub enum Error {
 
 crate::impl_from_auth_err!(Error);
 
-pub type Response = ListResponse<super::User>;
+crate::alias_and_ref!(ListResponse<super::User>, ListUsersResponse, Response, ser);
 
 #[async_trait::async_trait]
 impl crate::AuthenticatedEndpoint for ListUsers {
@@ -67,12 +66,12 @@ impl crate::AuthenticatedEndpoint for ListUsers {
         }
     }
 
-    #[tracing::instrument(skip(ctx))]
+    // #[tracing::instrument(skip(ctx))]
     async fn handle(
         &self,
         ctx: &crate::Context,
         _accessing_user: uuid::Uuid,
-        request: Self::Request,
+        Request(request): Self::Request,
     ) -> Result<Self::Response, Self::Error> {
         validator::Validate::validate(&request).map_err(utils::ValidationErrors::from)?;
         let (cursor_clause, sorting_field, sorting_order, filter) = request
@@ -222,12 +221,13 @@ LIMIT $2 + 1
                 } else {
                     None
                 };
-                Ok(Response { cursor, items })
+                Ok(ListUsersResponse { cursor, items }.into())
             }
-            Err(sqlx::Error::RowNotFound) => Ok(Response {
+            Err(sqlx::Error::RowNotFound) => Ok(ListUsersResponse {
                 cursor: None,
                 items: vec![],
-            }),
+            }
+            .into()),
             Err(err) => Err(Error::Internal {
                 message: format!("db err: {err}"),
             }),
@@ -250,48 +250,53 @@ impl HttpEndpoint for ListUsers {
     const METHOD: Method = Method::Get;
     const PATH: &'static str = "/users";
 
-    type Parameters = (BearerToken, Json<Request>);
+    type HttpRequest = (BearerToken, Json<Request>);
 
     fn request(
-        (BearerToken(token), Json(request)): Self::Parameters,
+        (BearerToken(token), Json(Request(request))): Self::HttpRequest,
     ) -> Result<Self::Request, Self::Error> {
-        Ok(self::Request {
+        Ok(ListUsersRequest {
             auth_token: Some(token),
             ..request
-        })
+        }
+        .into())
+    }
+
+    fn response(Response(resp): Self::Response) -> axum::response::Response {
+        Json(resp).into_response()
     }
 }
 
 impl DocumentedEndpoint for ListUsers {
     const TAG: &'static crate::Tag = &super::TAG;
-    const SUMMARY: &'static str = "List the User objects.";
 
-    fn successs() -> SuccessResponse<Self::Response> {
+    fn success_examples() -> Vec<serde_json::Value> {
         use crate::user::testing::*;
-        (
-            "Success getting Users",
-            Response {
-                cursor: None,
-                items: vec![
-                    User {
-                        id: Default::default(),
-                        created_at: time::OffsetDateTime::now_utc(),
-                        updated_at: time::OffsetDateTime::now_utc(),
-                        email: USER_01_EMAIL.into(),
-                        username: USER_01_USERNAME.into(),
-                        pic_url: Some("https:://example.com/picture.jpg".into()),
-                    },
-                    User {
-                        id: Default::default(),
-                        created_at: time::OffsetDateTime::now_utc(),
-                        updated_at: time::OffsetDateTime::now_utc(),
-                        email: USER_02_EMAIL.into(),
-                        username: USER_02_USERNAME.into(),
-                        pic_url: None,
-                    },
-                ],
-            },
-        )
+        [ListUsersResponse {
+            cursor: None,
+            items: vec![
+                User {
+                    id: Default::default(),
+                    created_at: time::OffsetDateTime::now_utc(),
+                    updated_at: time::OffsetDateTime::now_utc(),
+                    email: USER_01_EMAIL.into(),
+                    username: USER_01_USERNAME.into(),
+                    pic_url: Some("https:://example.com/picture.jpg".into()),
+                },
+                User {
+                    id: Default::default(),
+                    created_at: time::OffsetDateTime::now_utc(),
+                    updated_at: time::OffsetDateTime::now_utc(),
+                    email: USER_02_EMAIL.into(),
+                    username: USER_02_USERNAME.into(),
+                    pic_url: None,
+                },
+            ],
+        }]
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .unwrap()
     }
 
     fn errors() -> Vec<ErrorResponse<Error>> {
@@ -336,7 +341,7 @@ mod tests {
     use crate::user::testing::*;
     use crate::utils::testing::*;
 
-    fn fixture_request() -> Request {
+    fn fixture_request() -> ListUsersRequest {
         serde_json::from_value(fixture_request_json()).unwrap()
     }
 
@@ -371,14 +376,14 @@ mod tests {
 
     list_users_validate! {
         rejects_too_large_limits: (
-            Request {
+            ListUsersRequest {
                 limit: Some(99999),
                 ..fixture_request()
             },
             Some("limit"),
         ),
         rejects_both_cursors_at_once: (
-            Request {
+            ListUsersRequest {
                 before_cursor: Some("cursorstr".into()),
                 after_cursor: Some("cursorstr".into()),
                 auth_token: None,
@@ -390,7 +395,7 @@ mod tests {
             Some("__all__"),
         ),
         rejects_cursors_with_filter: (
-            Request {
+            ListUsersRequest {
                 after_cursor: Some("cursorstr".into()),
                 ..fixture_request()
             },

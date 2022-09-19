@@ -1,3 +1,93 @@
+
+/// TODO: DRY me up
+#[macro_export]
+macro_rules! alias_and_ref {
+    ($aliased_type:ty, $alias_name:ident, $ref_name:ident) => {
+        pub type $alias_name = $aliased_type;
+        #[derive(educe::Educe)]
+        #[educe(Deref)]
+        pub struct $ref_name($alias_name);
+        impl From<$alias_name> for $ref_name {
+            fn from(inner: $alias_name) -> Self {
+                Self(inner)
+            }
+        }
+        impl ToRefOrSchema for $ref_name {
+            fn schema_name() -> &'static str {
+                stringify!($alias_name)
+            }
+
+            fn ref_or_schema() -> openapi::schema::RefOr<openapi::schema::Schema> {
+                openapi::schema::Ref::from_schema_name(Self::schema_name()).into()
+            }
+        }
+    };
+    ($aliased_type:ty, $alias_name:ident, $ref_name:ident, ser) => {
+        pub type $alias_name = $aliased_type;
+        #[derive(educe::Educe, serde::Serialize)]
+        #[serde(crate = "serde")]
+        #[educe(Deref)]
+        pub struct $ref_name($alias_name);
+        impl From<$alias_name> for $ref_name {
+            fn from(inner: $alias_name) -> Self {
+                Self(inner)
+            }
+        }
+        impl ToRefOrSchema for $ref_name {
+            fn schema_name() -> &'static str {
+                stringify!($alias_name)
+            }
+
+            fn ref_or_schema() -> openapi::schema::RefOr<openapi::schema::Schema> {
+                openapi::schema::Ref::from_schema_name(Self::schema_name()).into()
+            }
+        }
+    };
+    ($aliased_type:ty, $alias_name:ident, $ref_name:ident, de) => {
+        pub type $alias_name = $aliased_type;
+        #[derive(educe::Educe, serde::Deserialize)]
+        #[serde(crate = "serde")]
+        #[educe(Deref)]
+        pub struct $ref_name($alias_name);
+        impl From<$alias_name> for $ref_name {
+            fn from(inner: $alias_name) -> Self {
+                Self(inner)
+            }
+        }
+        impl ToRefOrSchema for $ref_name {
+            fn schema_name() -> &'static str {
+                stringify!($alias_name)
+            }
+
+            fn ref_or_schema() -> openapi::schema::RefOr<openapi::schema::Schema> {
+                openapi::schema::Ref::from_schema_name(Self::schema_name()).into()
+            }
+        }
+    };
+    ($aliased_type:ty, $alias_name:ident, $ref_name:ident, ser, de) => {
+        pub type $alias_name = $aliased_type;
+        #[derive(educe::Educe, serde::Serialize, serde::Deserialize)]
+        #[serde(crate = "serde")]
+        #[educe(Deref)]
+        pub struct $ref_name($alias_name);
+        impl From<$alias_name> for $ref_name {
+            fn from(inner: $alias_name) -> Self {
+                Self(inner)
+            }
+        }
+        impl ToRefOrSchema for $ref_name {
+            fn schema_name() -> &'static str {
+                stringify!($alias_name)
+            }
+
+            fn ref_or_schema() -> openapi::schema::RefOr<openapi::schema::Schema> {
+                openapi::schema::Ref::from_schema_name(Self::schema_name()).into()
+            }
+        }
+    };
+}
+
+
 /// Implement [`From`] [`crate::auth::authorize::Error`] for the provided type
 /// This expects the standard unit `AccessDenied` and the struct `Internal`
 /// variant on the `Error` enum

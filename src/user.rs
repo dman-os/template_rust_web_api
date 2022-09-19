@@ -21,12 +21,15 @@ pub struct User {
     pub pic_url: Option<String>,
 }
 
+pub use list::UserSortingField;
+
 pub const TAG: crate::Tag = crate::Tag {
     name: "user",
     desc: "Manipulate User objects.",
 };
 
 mod create;
+mod delete;
 mod get;
 mod list;
 mod update;
@@ -37,6 +40,7 @@ pub fn router() -> axum::Router {
         .merge(EndpointWrapper::new(create::CreateUser))
         .merge(EndpointWrapper::new(update::UpdateUser))
         .merge(EndpointWrapper::new(list::ListUsers))
+        .merge(EndpointWrapper::new(delete::DeleteUser))
 }
 
 pub fn components(
@@ -46,7 +50,15 @@ pub fn components(
     let builder = create::CreateUser::components(builder);
     let builder = update::UpdateUser::components(builder);
     let builder = list::ListUsers::components(builder);
-    builder.schema("User", <User as utoipa::ToSchema>::schema())
+    let builder = delete::DeleteUser::components(builder);
+    builder
+        .schema("User", <User as utoipa::ToSchema>::schema())
+        .schema(
+            crate::utils::type_name_raw::<UserSortingField>(),
+            <UserSortingField as utoipa::ToSchema>::schema(),
+        )
+        .schemas_from_iter(<list::ListUsersRequest as utoipa::ToSchema>::aliases())
+        .schemas_from_iter(<list::ListUsersResponse as utoipa::ToSchema>::aliases())
 }
 
 pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBuilder {
@@ -58,6 +70,10 @@ pub fn paths(builder: utoipa::openapi::PathsBuilder) -> utoipa::openapi::PathsBu
         .path(
             crate::axum_path_str_to_openapi(update::UpdateUser::PATH),
             update::UpdateUser::path_item(),
+        )
+        .path(
+            crate::axum_path_str_to_openapi(delete::DeleteUser::PATH),
+            delete::DeleteUser::path_item(),
         )
         .path(
             crate::axum_path_str_to_openapi(create::CreateUser::PATH),

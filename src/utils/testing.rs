@@ -202,7 +202,7 @@ pub fn check_json(
                     (&format!("{check_name}.{key}"), val),
                     (
                         &format!("{json_name}.{key}"),
-                        &response
+                        response
                             .get(key)
                             .ok_or_else(|| {
                                 format!("key {key} wasn't found on {json_name}: {response:?}")

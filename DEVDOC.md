@@ -20,6 +20,15 @@ If you're in a team, just use your git host's features or something.
 
 ### Features
 
+### Endpoints
+
+- [ ] User
+  - [ ] Get
+  - [ ] Create
+  - [ ] Update
+  - [ ] Delete
+  - [ ] List
+
 ## dev-log
 
 ### Upstream Issues

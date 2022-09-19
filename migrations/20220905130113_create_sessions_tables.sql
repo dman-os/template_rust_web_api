@@ -9,7 +9,7 @@ CREATE TABLE sessions (
     CONSTRAINT fk_user_id  FOREIGN KEY(user_id) REFERENCES users(id)
 ) INHERITS (__sessions_core);
 
-CREATE TABLE sessions_delted (
+CREATE TABLE sessions_deleted (
     deleted_at  TIMESTAMPTZ NOT NULL    DEFAULT CURRENT_TIMESTAMP
 ) INHERITS (__sessions_core);
 

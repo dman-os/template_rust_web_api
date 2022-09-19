@@ -64,7 +64,7 @@
                   }
                 },
                 "example": {
-                  "expiresAt": 1663514741,
+                  "expiresAt": 1663516381,
                   "token": "mcpqwen8y3489nc8y2pf",
                   "userId": "00000000-0000-0000-0000-000000000000"
                 }
@@ -145,19 +145,19 @@
                   "cursor": null,
                   "items": [
                     {
-                      "createdAt": 1663514741,
+                      "createdAt": 1663516381,
                       "email": "hex.queen@teen.dj",
                       "id": "00000000-0000-0000-0000-000000000000",
                       "picUrl": "https:://example.com/picture.jpg",
-                      "updatedAt": 1663514741,
+                      "updatedAt": 1663516381,
                       "username": "sabrina"
                     },
                     {
-                      "createdAt": 1663514741,
+                      "createdAt": 1663516381,
                       "email": "archie1941@poetry.ybn",
                       "id": "00000000-0000-0000-0000-000000000000",
                       "picUrl": null,
-                      "updatedAt": 1663514741,
+                      "updatedAt": 1663516381,
                       "username": "archie"
                     }
                   ]
@@ -267,11 +267,11 @@
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663514741,
+                  "createdAt": 1663516381,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663514741,
+                  "updatedAt": 1663516381,
                   "username": "sabrina"
                 }
               }
@@ -346,11 +346,11 @@
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663514741,
+                  "createdAt": 1663516381,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663514741,
+                  "updatedAt": 1663516381,
                   "username": "sabrina"
                 }
               }
@@ -456,11 +456,11 @@
                   "$ref": "#/components/schemas/User"
                 },
                 "example": {
-                  "createdAt": 1663514741,
+                  "createdAt": 1663516381,
                   "email": "hex.queen@teen.dj",
                   "id": "00000000-0000-0000-0000-000000000000",
                   "picUrl": "https:://example.com/picture.jpg",
-                  "updatedAt": 1663514741,
+                  "updatedAt": 1663516381,
                   "username": "sabrina"
                 }
               }
@@ -766,6 +766,29 @@
           }
         ]
       },
+      "ListUsersRequest": {
+        "type": "object",
+        "properties": {
+          "afterCursor": {
+            "type": "string"
+          },
+          "beforeCursor": {
+            "type": "string"
+          },
+          "filter": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "sortingField": {
+            "$ref": "#/components/schemas/UserSortingField"
+          },
+          "sortingOrder": {
+            "$ref": "#/components/schemas/SortingOrder"
+          }
+        }
+      },
       "UpdateUserError": {
         "oneOf": [
           {
@@ -913,6 +936,15 @@
             "example": "hunter2"
           }
         }
+      },
+      "UserSortingList": {
+        "type": "string",
+        "enum": [
+          "username",
+          "email",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "ValidationError": {
         "type": "object",

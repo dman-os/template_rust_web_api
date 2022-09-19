@@ -1,12 +1,13 @@
 use deps::*;
 
+use crate::user::{User, UserSortingField};
 use serde::{Deserialize, Serialize};
 
 pub trait SortingField {
     fn sql_field_name(&self) -> String;
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 pub enum SortingOrder {
     Ascending,
@@ -27,6 +28,7 @@ pub const DEFAULT_LIST_LIMIT: usize = 25;
 #[derive(Debug, Serialize, Deserialize, validator::Validate, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
 #[validate(schema(function = "validate_list_req"))]
+#[aliases(ListUsersRequest = ListRequest<UserSortingField>)]
 pub struct ListRequest<S>
 where
     S: SortingField + Clone + Copy + Serialize,
@@ -99,6 +101,7 @@ where
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(crate = "serde", rename_all = "camelCase")]
+#[aliases(ListUsersResponse = ListResponse<User>)]
 pub struct ListResponse<T>
 where
     T: utoipa::ToSchema,

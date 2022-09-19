@@ -115,22 +115,25 @@ impl HttpEndpoint for CreateUser {
     const PATH: &'static str = "/users";
     const SUCCESS_CODE: StatusCode = StatusCode::CREATED;
 
-    type Parameters = (Json<Request>,);
+    type HttpRequest = (Json<Request>,);
 
-    fn request((Json(req),): Self::Parameters) -> Result<Self::Request, Self::Error> {
+    fn request((Json(req),): Self::HttpRequest) -> Result<Self::Request, Self::Error> {
         Ok(req)
+    }
+
+    fn response(Ref(resp): Self::Response) -> axum::response::Response {
+        Json(resp).into_response()
     }
 }
 
 impl DocumentedEndpoint for CreateUser {
     const TAG: &'static Tag = &super::TAG;
-
     const SUMMARY: &'static str = "Create a new User resource.";
+    const SUCCESS_DESCRIPTION: &'static str = "Success creating a User object";
 
-    fn successs() -> SuccessResponse<Self::Response> {
+    fn success_examples() -> Vec<serde_json::Value> {
         use crate::user::testing::*;
-        (
-            "Success creating a User object",
+        [
             super::User {
                 id: Default::default(),
                 created_at: time::OffsetDateTime::now_utc(),
@@ -139,8 +142,11 @@ impl DocumentedEndpoint for CreateUser {
                 username: USER_01_USERNAME.into(),
                 pic_url: Some("https:://example.com/picture.jpg".into()),
             }
-            .into(),
-        )
+        ]
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .unwrap()
     }
 
     fn errors() -> Vec<ErrorResponse<Self::Error>> {
